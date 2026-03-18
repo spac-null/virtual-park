@@ -69,15 +69,16 @@ canvas{display:block;cursor:none}
 #crosshair::before{width:1px;height:100%;left:50%;top:0}
 #crosshair::after{width:100%;height:1px;top:50%;left:0}
 
-#mobile-joy{position:absolute;bottom:30px;left:30px;z-index:15;width:110px;height:110px;display:none;pointer-events:auto}
-#joy-base{width:110px;height:110px;border-radius:50%;background:rgba(0,100,200,0.1);border:2px solid rgba(0,100,200,0.3)}
-#joy-thumb{position:absolute;top:50%;left:50%;width:40px;height:40px;margin:-20px 0 0 -20px;border-radius:50%;background:rgba(0,100,200,0.2);border:1px solid rgba(0,100,200,0.4)}
-#mobile-flap{position:absolute;bottom:40px;left:50%;transform:translateX(-50%);z-index:15;width:60px;height:60px;border-radius:50%;background:rgba(255,255,255,0.7);border:2px solid rgba(0,100,200,0.3);display:none;pointer-events:auto;font-size:10px;line-height:60px;text-align:center;color:rgba(0,100,200,0.7);text-transform:uppercase;letter-spacing:1px}
-@media(hover:none)and(pointer:coarse){
-  #mobile-joy,#mobile-flap{display:block}
-  #hint{display:none}
-  #crosshair{display:none}
-}
+#mobile-joy{position:absolute;bottom:24px;left:20px;z-index:15;width:120px;height:120px;display:none;pointer-events:auto;touch-action:none}
+#joy-base{width:120px;height:120px;border-radius:50%;background:rgba(0,100,200,0.15);border:2px solid rgba(0,100,200,0.4)}
+#joy-thumb{position:absolute;top:50%;left:50%;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;background:rgba(0,100,200,0.35);border:2px solid rgba(0,150,255,0.6)}
+.mob-btn{position:absolute;z-index:15;border-radius:50%;display:none;pointer-events:auto;touch-action:none;font-family:'Courier New',monospace;text-transform:uppercase;letter-spacing:1px;text-align:center;color:#fff;font-size:10px}
+#mobile-flap{bottom:100px;right:20px;width:70px;height:70px;line-height:70px;background:rgba(0,100,220,0.75);border:2px solid rgba(100,180,255,0.6)}
+#mobile-egg{bottom:185px;right:20px;width:60px;height:60px;line-height:60px;background:rgba(180,140,0,0.8);border:2px solid rgba(255,210,0,0.6)}
+#mobile-fire{bottom:100px;right:20px;width:70px;height:70px;line-height:70px;background:rgba(255,100,0,0.75);border:2px solid rgba(255,160,0,0.6)}
+#mobile-rocket{bottom:185px;right:20px;width:60px;height:60px;line-height:60px;background:rgba(200,0,0,0.8);border:2px solid rgba(255,80,80,0.6)}
+#mobile-chat{bottom:24px;left:50%;transform:translateX(-50%);width:54px;height:54px;line-height:54px;background:rgba(30,30,60,0.75);border:2px solid rgba(150,180,255,0.4);font-size:18px}
+#hint{display:none}
 
 .name-label{position:absolute;z-index:8;pointer-events:none;font-family:'Courier New',monospace;font-size:13px;font-weight:bold;color:#ffffff;text-shadow:0 0 4px #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;white-space:nowrap;transform:translate(-50%,-100%);letter-spacing:0.5px}
 #char-select{position:absolute;top:0;left:0;width:100%;height:100%;background:#4488dd;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:50;font-family:'Courier New',monospace}
@@ -157,9 +158,11 @@ canvas{display:block;cursor:none}
 <div id="crosshair"></div>
 
 <div id="mobile-joy"><div id="joy-base"><div id="joy-thumb"></div></div></div>
-<div id="mobile-flap">FLAP</div>
-<div id="mobile-fire" style="position:absolute;bottom:40px;right:30px;z-index:15;width:70px;height:70px;border-radius:50%;background:rgba(255,100,0,0.7);border:2px solid rgba(255,150,0,0.5);display:none;pointer-events:auto;font-size:10px;line-height:70px;text-align:center;color:#fff;text-transform:uppercase;letter-spacing:1px;font-family:'Courier New',monospace;">FIRE</div>
-<div id="mobile-rocket" style="position:absolute;bottom:130px;right:30px;z-index:15;width:60px;height:60px;border-radius:50%;background:rgba(200,0,0,0.7);border:2px solid rgba(255,80,80,0.5);display:none;pointer-events:auto;font-size:9px;line-height:60px;text-align:center;color:#fff;text-transform:uppercase;letter-spacing:1px;font-family:'Courier New',monospace;">🚀</div>
+<div id="mobile-flap" class="mob-btn">FLAP</div>
+<div id="mobile-egg" class="mob-btn">EGG</div>
+<div id="mobile-fire" class="mob-btn">FIRE</div>
+<div id="mobile-rocket" class="mob-btn">🚀</div>
+<div id="mobile-chat" class="mob-btn">💬</div>
 
 <div id="msg-log" style="position:absolute;bottom:14px;right:14px;z-index:10;pointer-events:auto;width:280px;max-height:320px;background:rgba(10,10,30,0.82);border:1px solid rgba(100,150,255,0.25);border-radius:8px;overflow:hidden;display:none;flex-direction:column;">
   <div style="padding:6px 12px;font-family:'Courier New',monospace;font-size:11px;color:#aabbff;border-bottom:1px solid rgba(100,150,255,0.15);display:flex;justify-content:space-between;align-items:center;">
@@ -787,6 +790,10 @@ if (flapBtn) {
   flapBtn.addEventListener('touchstart', e => { e.preventDefault(); mobileFlap = true; });
   flapBtn.addEventListener('touchend', () => { mobileFlap = false; });
 }
+const eggBtn = document.getElementById('mobile-egg');
+if (eggBtn) {
+  eggBtn.addEventListener('touchstart', e => { e.preventDefault(); initAudio(); dropEgg(); });
+}
 const fireBtn = document.getElementById('mobile-fire');
 if (fireBtn) {
   fireBtn.addEventListener('touchstart', e => { e.preventDefault(); initAudio(); fireBarooka(); });
@@ -794,6 +801,17 @@ if (fireBtn) {
 const rocketBtn = document.getElementById('mobile-rocket');
 if (rocketBtn) {
   rocketBtn.addEventListener('touchstart', e => { e.preventDefault(); initAudio(); fireRocket(); });
+}
+const chatBtn = document.getElementById('mobile-chat');
+if (chatBtn) {
+  chatBtn.addEventListener('touchstart', e => {
+    e.preventDefault();
+    if (tracePrompt) return;
+    tracePrompt = true;
+    const t = prompt('message:');
+    tracePrompt = false;
+    if (t && t.trim()) sendTrace(t.trim());
+  });
 }
 
 // ── GEMS ────────────────────────────────────────────────
@@ -1573,7 +1591,7 @@ document.getElementById('msg-log-close')?.addEventListener('click', toggleMsgLog
 const toastEl = document.getElementById('chat-toast');
 let toastHideTimer = null;
 const toastQueue = [];  // { text, color }
-const isMobileDevice = () => window.matchMedia('(hover:none) and (pointer:coarse)').matches || window.innerWidth < 600;
+const isMobileDevice = () => navigator.maxTouchPoints > 0 || window.innerWidth < 600;
 
 function showChatToast(text, color) {
   if (!toastEl) return;
@@ -1973,22 +1991,21 @@ function startGame(role) {
   connectWS();
   const msgBtn = document.getElementById('msg-log-btn');
   if (msgBtn) msgBtn.style.display = 'block';
-  // mobile button setup
-  const isMobile = window.matchMedia('(hover:none) and (pointer:coarse)').matches || window.innerWidth < 600;
-  if (isMobile) {
-    const joyEl = document.getElementById('mobile-joy');
-    if (joyEl) joyEl.style.display = 'block';
-    const fBtn = document.getElementById('mobile-flap');
-    const fBaz = document.getElementById('mobile-fire');
-    const fRkt = document.getElementById('mobile-rocket');
+  // mobile controls — use touch capability detection (reliable across all browsers)
+  const hasTouch = navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
+  if (hasTouch) {
+    const show = id => { const el = document.getElementById(id); if (el) el.style.display = 'block'; };
+    const hide = id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; };
+    show('mobile-joy');
+    show('mobile-chat');
+    document.getElementById('hint') && (document.getElementById('hint').style.display = 'none');
+    document.getElementById('crosshair') && (document.getElementById('crosshair').style.display = 'none');
     if (role === 'duck') {
-      if (fBtn) fBtn.style.display = 'none';
-      if (fBaz) fBaz.style.display = 'block';
-      if (fRkt) fRkt.style.display = 'block';
+      hide('mobile-flap'); hide('mobile-egg');
+      show('mobile-fire'); show('mobile-rocket');
     } else {
-      if (fBtn) { fBtn.style.display = 'block'; fBtn.textContent = 'FLAP'; }
-      if (fBaz) fBaz.style.display = 'none';
-      if (fRkt) fRkt.style.display = 'none';
+      show('mobile-flap'); show('mobile-egg');
+      hide('mobile-fire'); hide('mobile-rocket');
     }
   }
 }
