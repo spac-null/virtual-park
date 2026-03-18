@@ -2495,19 +2495,21 @@ function animate() {
     _tv1.copy(player.mesh.position); _tv1.y += 1.2;
     camera.lookAt(_tv1);
   } else {
-  // Lag camera yaw behind bird — prevents shake on sharp turns
+  // Camera yaw: desktop lags for smooth cinematic feel; mobile snaps so it always faces where bird faces
+  const isTouchDevice = navigator.maxTouchPoints > 0;
   let dyaw = player.mesh.rotation.y - camState.yaw;
   while (dyaw > Math.PI)  dyaw -= Math.PI * 2;
   while (dyaw < -Math.PI) dyaw += Math.PI * 2;
-  camState.yaw += dyaw * Math.min(3.5 * dt, 1);
+  camState.yaw += dyaw * (isTouchDevice ? 1 : Math.min(3.5 * dt, 1));
 
   // Smooth XZ always; when landed smooth Y slowly against terrain (not bird Y which snaps every frame)
   const targetY = player.landed
     ? terrainY(player.mesh.position.x, player.mesh.position.z) + 0.7
     : player.mesh.position.y;
-  camState.smoothPos.x = lerp(camState.smoothPos.x, player.mesh.position.x, Math.min(6 * dt, 1));
-  camState.smoothPos.z = lerp(camState.smoothPos.z, player.mesh.position.z, Math.min(6 * dt, 1));
-  camState.smoothPos.y = lerp(camState.smoothPos.y, targetY, Math.min(player.landed ? 1.5 * dt : 6 * dt, 1));
+  const posFollow = isTouchDevice ? 1 : Math.min(6 * dt, 1);
+  camState.smoothPos.x = lerp(camState.smoothPos.x, player.mesh.position.x, posFollow);
+  camState.smoothPos.z = lerp(camState.smoothPos.z, player.mesh.position.z, posFollow);
+  camState.smoothPos.y = lerp(camState.smoothPos.y, targetY, isTouchDevice ? Math.min(4 * dt, 1) : Math.min(player.landed ? 1.5 * dt : 6 * dt, 1));
 
   // Camera sits behind+above bird using lagged yaw
   _tv1.set(0, 3, 13);
