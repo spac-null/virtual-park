@@ -2770,32 +2770,15 @@
             const left = gameState.moveLeft || moveLeft;
             const right = gameState.moveRight || moveRight;
             
-            // Zelda-style movement: character always moves in the direction they're facing
-            // and camera follows behind
-            
-            // First, handle rotation based on left/right inputs
-            const rotationSpeed = 0.05;
-            if (left) {
-                birdGroup.rotation.y -= rotationSpeed;
-            }
-            if (right) {
-                birdGroup.rotation.y += rotationSpeed;
-            }
-            
-            // Then move forward/backward in the direction the bird is facing
+            // Mario 64 style: left/right rotates character, up/down moves in facing direction
+            const rotationSpeed = 0.06;
+            if (left)  birdGroup.rotation.y -= rotationSpeed;
+            if (right) birdGroup.rotation.y += rotationSpeed;
+
             if (forward || backward) {
-                // Calculate movement direction based on bird's current rotation
-                const moveSpeed = forward ? 0.5 : -0.25; // slower when moving backward
-                
-                // Use the bird's orientation to determine movement direction
-                // In THREE.js, rotation.y is the angle around the Y axis (horizontal rotation)
-                const directionX = Math.sin(birdGroup.rotation.y);
-                const directionZ = Math.cos(birdGroup.rotation.y);
-                
-                // Move in the direction the bird is facing
-                birdGroup.position.x += directionX * moveSpeed;
-                birdGroup.position.z += directionZ * moveSpeed;
-                
+                const moveSpeed = forward ? 0.5 : -0.25;
+                birdGroup.position.x += Math.sin(birdGroup.rotation.y) * moveSpeed;
+                birdGroup.position.z += Math.cos(birdGroup.rotation.y) * moveSpeed;
             }
             
             // Wing animation - flap faster when moving forward
@@ -2877,26 +2860,19 @@
             // Classic Zelda-style camera (follows behind character)
             const birdPos = birdGroup.position;
             
-            // Calculate camera position based on bird rotation (always behind)
-            const cameraDistance = 10; // Distance behind bird
-            const cameraHeight = 5;    // Height above bird
-            const cameraLag = 0.14;    // How quickly camera catches up (lower = smoother)
-            
-            // Calculate ideal camera position (always behind the bird)
-            const angle = birdGroup.rotation.y; // Bird's current facing angle
-            
-            // Position camera behind the bird using the bird's rotation angle
-            // For the Zelda camera, we need to be directly behind the character
+            // Mario 64 camera: elevated, follows behind, smooth lag
+            const cameraDistance = 14;
+            const cameraHeight = 10;
+            const cameraLag = 0.1;
+
+            const angle = birdGroup.rotation.y;
             const targetCameraPos = new THREE.Vector3(
-                birdPos.x - Math.sin(angle) * cameraDistance,  // X position behind bird
-                birdPos.y + cameraHeight,                       // Y position above bird
-                birdPos.z - Math.cos(angle) * cameraDistance   // Z position behind bird
+                birdPos.x - Math.sin(angle) * cameraDistance,
+                birdPos.y + cameraHeight,
+                birdPos.z - Math.cos(angle) * cameraDistance
             );
-            
-            // Smoothly move camera toward target position
+
             camera.position.lerp(targetCameraPos, cameraLag);
-            
-            // Camera always looks directly at the bird
             camera.lookAt(birdPos);
             
             // Update zone and interaction status
