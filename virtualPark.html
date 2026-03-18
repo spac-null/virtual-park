@@ -540,7 +540,14 @@ function createBirdMesh(color) {
   group.add(tailG);
   group.userData.tail = tailG;
 
-  return group;
+  // Wrap in pivot so head faces movement direction
+  const pivot = new THREE.Group();
+  pivot.rotation.y = Math.PI;
+  [...group.children].forEach(c => pivot.add(c));
+  const outer = new THREE.Group();
+  outer.userData = group.userData;
+  outer.add(pivot);
+  return outer;
 }
 
 // ── CRAB MESH ────────────────────────────────────────────
@@ -620,7 +627,14 @@ function createCrabMesh(color) {
   bazMuzzle.position.set(2.6, 0.08, 0.18);
   g.add(bazMuzzle);
 
-  return g;
+  // Wrap in pivot so head faces movement direction
+  const pivot = new THREE.Group();
+  pivot.rotation.y = Math.PI;
+  [...g.children].forEach(c => pivot.add(c));
+  const outer = new THREE.Group();
+  outer.userData = g.userData;
+  outer.add(pivot);
+  return outer;
 }
 
 // ── PLAYER STATE ────────────────────────────────────────
