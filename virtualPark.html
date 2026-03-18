@@ -76,13 +76,16 @@ canvas{display:block;cursor:none}
 .name-label{position:absolute;z-index:8;pointer-events:none;font-family:'Courier New',monospace;font-size:13px;font-weight:bold;color:#ffffff;text-shadow:0 0 4px #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;white-space:nowrap;transform:translate(-50%,-100%);letter-spacing:0.5px}
 #char-select{position:absolute;top:0;left:0;width:100%;height:100%;background:#4488dd;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:50;font-family:'Courier New',monospace}
 .cs-title{font-size:38px;color:#1a1a2e;letter-spacing:6px;margin-bottom:6px;font-weight:bold}
-.cs-sub{font-size:12px;color:#555;letter-spacing:3px;text-transform:uppercase;margin-bottom:40px}
+.cs-sub{font-size:12px;color:#555;letter-spacing:3px;text-transform:uppercase;margin-bottom:18px}
 .cs-row{display:flex;gap:28px}
 .cs-btn{background:rgba(255,255,255,0.9);border:2px solid rgba(0,100,200,0.22);border-radius:12px;padding:28px 36px;cursor:pointer;font-family:'Courier New',monospace;text-align:center;transition:transform 0.1s,box-shadow 0.1s;box-shadow:0 2px 14px rgba(0,0,0,0.1);min-width:180px}
 .cs-btn:hover{transform:scale(1.05);box-shadow:0 6px 24px rgba(0,0,0,0.18)}
 .cs-icon{font-size:52px;margin-bottom:12px}
 .cs-name{font-size:18px;color:#0055cc;letter-spacing:3px;margin-bottom:6px}
 .cs-desc{font-size:10px;color:#888;line-height:1.6}
+#cs-name-input{font-family:'Courier New',monospace;font-size:15px;padding:8px 16px;border:2px solid rgba(0,100,200,0.25);border-radius:8px;background:rgba(255,255,255,0.9);color:#1a1a2e;text-align:center;width:200px;margin-bottom:22px;letter-spacing:1px;outline:none}
+#hud-lives{position:absolute;top:48px;left:50%;transform:translateX(-50%);z-index:10;font-size:22px;letter-spacing:5px;pointer-events:none;text-shadow:0 0 6px rgba(0,0,0,0.5)}
+#game-over{display:none;position:absolute;top:0;left:0;width:100%;height:100%;z-index:60;background:rgba(0,0,0,0.88);font-family:'Courier New',monospace;align-items:center;justify-content:center;flex-direction:column;}
 </style>
 </head>
 <body>
@@ -116,6 +119,14 @@ canvas{display:block;cursor:none}
 
 <div id="zone-flash"></div>
 
+<div id="hud-lives">♥♥♥</div>
+
+<div id="game-over">
+  <div style="color:#ff3333;font-size:52px;font-weight:bold;letter-spacing:4px;margin-bottom:10px;">YOU DIED</div>
+  <div id="go-msg" style="color:rgba(255,255,255,0.6);font-size:14px;margin-bottom:28px;"></div>
+  <button id="go-restart" style="font-family:'Courier New',monospace;font-size:14px;padding:12px 32px;background:rgba(255,255,255,0.9);border:none;border-radius:6px;cursor:pointer;font-weight:bold;letter-spacing:2px;">▶ PLAY AGAIN</button>
+</div>
+
 <div id="scoreboard" class="panel">
   <table><thead><tr><th>#</th><th>Player</th><th>Score</th></tr></thead><tbody id="sb-body"></tbody></table>
 </div>
@@ -143,6 +154,8 @@ canvas{display:block;cursor:none}
 
 <div id="mobile-joy"><div id="joy-base"><div id="joy-thumb"></div></div></div>
 <div id="mobile-flap">FLAP</div>
+<div id="mobile-fire" style="position:absolute;bottom:40px;right:30px;z-index:15;width:70px;height:70px;border-radius:50%;background:rgba(255,100,0,0.7);border:2px solid rgba(255,150,0,0.5);display:none;pointer-events:auto;font-size:10px;line-height:70px;text-align:center;color:#fff;text-transform:uppercase;letter-spacing:1px;font-family:'Courier New',monospace;">FIRE</div>
+<div id="mobile-rocket" style="position:absolute;bottom:130px;right:30px;z-index:15;width:60px;height:60px;border-radius:50%;background:rgba(200,0,0,0.7);border:2px solid rgba(255,80,80,0.5);display:none;pointer-events:auto;font-size:9px;line-height:60px;text-align:center;color:#fff;text-transform:uppercase;letter-spacing:1px;font-family:'Courier New',monospace;">🚀</div>
 
 <div id="msg-log" style="position:absolute;bottom:14px;right:14px;z-index:10;pointer-events:auto;width:280px;max-height:320px;background:rgba(10,10,30,0.82);border:1px solid rgba(100,150,255,0.25);border-radius:8px;overflow:hidden;display:none;flex-direction:column;">
   <div style="padding:6px 12px;font-family:'Courier New',monospace;font-size:11px;color:#aabbff;border-bottom:1px solid rgba(100,150,255,0.15);display:flex;justify-content:space-between;align-items:center;">
@@ -167,6 +180,7 @@ canvas{display:block;cursor:none}
 <div id="char-select">
   <div class="cs-title">THE GARDEN ABOVE</div>
   <div class="cs-sub">choose your creature</div>
+  <input id="cs-name-input" type="text" maxlength="20" placeholder="your name">
   <div class="cs-row">
     <button class="cs-btn" id="btn-bird">
       <div class="cs-icon">~~^~~</div>
@@ -231,6 +245,7 @@ if (!playerName) {
   playerName = pick(adjectives) + '-' + pick(nouns);
   localStorage.setItem('vp_playerName', playerName);
 }
+{ const inp = document.getElementById('cs-name-input'); if (inp) inp.value = playerName; }
 
 // ── RENDERER & SCENE ────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -683,7 +698,8 @@ const player = {
   hitFlash: 0,
   landed: false,
   color: 0x00b3ff,
-  name: playerName
+  name: playerName,
+  lives: 3
 };
 
 player.mesh = createBirdMesh(player.color);
@@ -764,10 +780,19 @@ if (joyBase) {
     joyThumb.style.marginTop = '-20px';
   });
 }
+let mobileFireBaz = false, mobileFireRocket = false;
 const flapBtn = document.getElementById('mobile-flap');
 if (flapBtn) {
   flapBtn.addEventListener('touchstart', e => { e.preventDefault(); mobileFlap = true; });
   flapBtn.addEventListener('touchend', () => { mobileFlap = false; });
+}
+const fireBtn = document.getElementById('mobile-fire');
+if (fireBtn) {
+  fireBtn.addEventListener('touchstart', e => { e.preventDefault(); initAudio(); fireBarooka(); });
+}
+const rocketBtn = document.getElementById('mobile-rocket');
+if (rocketBtn) {
+  rocketBtn.addEventListener('touchstart', e => { e.preventDefault(); initAudio(); fireRocket(); });
 }
 
 // ── GEMS ────────────────────────────────────────────────
@@ -793,7 +818,7 @@ function getGemLight(color) {
 function spawnGem(typeIdx) {
   const t = CFG.gemTypes[typeIdx];
   const mesh = new THREE.Mesh(
-    new THREE.OctahedronGeometry(0.7),
+    new THREE.OctahedronGeometry(1.75),
     new THREE.MeshStandardMaterial({
       color: t.color, metalness: 1.0, roughness: 0.0,
       emissive: t.color, emissiveIntensity: 1.9
@@ -1032,6 +1057,7 @@ function updateProjectiles(dt) {
           player.score += pts; player.score = Math.min(player.score, 999);
           showZoneFlash(p.isRocket ? '+3 ROCKET HIT! 🚀' : '+2 DIRECT HIT!', '#ff4400');
           if (p.isRocket) triggerExplosion(p.mesh.position.clone());
+          if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'hit', targetId: id, fromName: playerName }));
           hit = true; break;
         }
       }
@@ -1046,7 +1072,8 @@ function updateProjectiles(dt) {
     }
     if (hit) {
       explode(p.mesh.position.clone(), 1.2);
-      scene.remove(p.mesh); p.mesh.geometry.dispose(); p.mesh.material.dispose();
+      scene.remove(p.mesh);
+      p.mesh.traverse(c => { if (c.isMesh) { c.geometry.dispose(); c.material.dispose(); } });
       projectiles.splice(i, 1);
     }
   }
@@ -1060,20 +1087,28 @@ function updateEggs(dt) {
     e.mesh.rotation.z += 3 * dt;
     e.life -= dt;
     const gY = terrainY(e.mesh.position.x, e.mesh.position.z);
-    if (e.mesh.position.y < gY + 0.35) {
-      if (!e.bounced) {
+    // check egg hit on remote players
+    let eHit = false;
+    for (const id in remotePlayers) {
+      if (e.mesh.position.distanceTo(remotePlayers[id].mesh.position) < 3.5) {
+        if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'hit', targetId: id, fromName: playerName }));
+        eHit = true; break;
+      }
+    }
+    if (eHit || e.mesh.position.y < gY + 0.35) {
+      if (!eHit && !e.bounced) {
         e.bounced = true;
         e.vel.y = Math.abs(e.vel.y) * 0.42;
         e.vel.x *= 0.5; e.vel.z *= 0.5;
         e.mesh.position.y = gY + 0.35;
       } else {
         explode(e.mesh.position.clone(), 1.8);
-        scene.remove(e.mesh); e.mesh.geometry.dispose(); eggs.splice(i, 1); continue;
+        scene.remove(e.mesh); e.mesh.traverse(c => { if (c.isMesh) { c.geometry.dispose(); c.material.dispose(); } }); eggs.splice(i, 1); continue;
       }
     }
     if (e.life <= 0) {
       explode(e.mesh.position.clone(), 1.8);
-      scene.remove(e.mesh); e.mesh.geometry.dispose(); eggs.splice(i, 1);
+      scene.remove(e.mesh); e.mesh.traverse(c => { if (c.isMesh) { c.geometry.dispose(); c.material.dispose(); } }); eggs.splice(i, 1);
     }
   }
 }
@@ -1311,16 +1346,25 @@ const remotePlayers = {};
 const remoteLabels = {};
 const remoteNests = {};
 
-function getRemotePlayer(id, name, color) {
-  if (remotePlayers[id]) return remotePlayers[id];
-  const mesh = createBirdMesh(color);
+function getRemotePlayer(id, name, color, role) {
+  if (remotePlayers[id]) {
+    const rp = remotePlayers[id];
+    if (role && rp.role !== role) {
+      scene.remove(rp.mesh);
+      rp.mesh = (role === 'duck') ? createCrabMesh(color) : createBirdMesh(color);
+      scene.add(rp.mesh);
+      rp.role = role;
+    }
+    return rp;
+  }
+  const mesh = (role === 'duck') ? createCrabMesh(color) : createBirdMesh(color);
   scene.add(mesh);
   const label = document.createElement('div');
   label.className = 'name-label';
   label.textContent = name || 'bird';
   document.body.appendChild(label);
   const rp = {
-    mesh, name, color, score: 0,
+    mesh, name, color, score: 0, role: role || 'bird',
     targetPos: new THREE.Vector3(0, CFG.spawnY, 0),
     targetRotY: 0, wingPhase: 0
   };
@@ -1398,18 +1442,23 @@ function connectWS() {
       nestLight.color.set(player.color);
       if (msg.players) {
         for (const p of msg.players) {
-          const rp = getRemotePlayer(p.id, p.name, parseColor(p.color));
+          const rp = getRemotePlayer(p.id, p.name, parseColor(p.color), p.role);
           rp.targetPos.set(p.x || 0, p.y || CFG.spawnY, p.z || 0);
           rp.targetRotY = p.rotY || 0;
           rp.score = p.score || 0;
           rp.name = p.name || 'bird';
         }
       }
+      if (msg.recent_traces) {
+        for (const t of msg.recent_traces) {
+          addTrace(t.x || 0, t.z || 0, t.y || CFG.spawnY, t.text || '', t.color || null, t.name || null);
+        }
+      }
     } else if (msg.type === 'join') {
-      getRemotePlayer(msg.id, msg.name, parseColor(msg.color));
+      getRemotePlayer(msg.id, msg.name, parseColor(msg.color), msg.role);
     } else if (msg.type === 'update') {
       if (msg.id === myId) return;
-      const rp = getRemotePlayer(msg.id, msg.name, parseColor(msg.color));
+      const rp = getRemotePlayer(msg.id, msg.name, parseColor(msg.color), msg.role);
       rp.targetPos.set(msg.x || 0, msg.y || CFG.spawnY, msg.z || 0);
       rp.targetRotY = msg.rotY || 0;
       rp.score = msg.score || 0;
@@ -1417,7 +1466,9 @@ function connectWS() {
     } else if (msg.type === 'leave') {
       removeRemotePlayer(msg.id);
     } else if (msg.type === 'trace') {
-      addTrace(msg.x || 0, msg.z || 0, msg.y || CFG.spawnY, msg.text || '', msg.color || null);
+      addTrace(msg.x || 0, msg.z || 0, msg.y || CFG.spawnY, msg.text || '', msg.color || null, msg.name || null);
+    } else if (msg.type === 'hit') {
+      onPlayerHit(msg.fromName || '?');
     }
   };
 }
@@ -1492,6 +1543,7 @@ function toggleMsgLog() {
   const btn = document.getElementById('msg-log-btn');
   if (panel) panel.style.display = msgLogOpen ? 'flex' : 'none';
   if (btn) btn.style.display = msgLogOpen ? 'none' : 'block';
+  if (msgLogOpen) renderMsgLog();
 }
 
 function pushMsgLog(text, color) {
@@ -1519,7 +1571,7 @@ document.getElementById('msg-log-close')?.addEventListener('click', toggleMsgLog
 // ── TRACES ──────────────────────────────────────────────
 const traces = [];
 
-function addTrace(x, z, y, text, color) {
+function addTrace(x, z, y, text, color, name) {
   const g = new THREE.Group();
 
   // Glowing orb (color of the sender)
@@ -1586,15 +1638,15 @@ function addTrace(x, z, y, text, color) {
   g.position.set(x, dropY, z);
   scene.add(g);
   traces.push({ group: g, life: 120, text });  // 2 min lifetime
-  pushMsgLog(text, color);
+  pushMsgLog((name ? '[' + name + '] ' : '') + text, color);
 }
 
 function sendTrace(text) {
   if (!ws || ws.readyState !== 1) return;
   const p = player.mesh.position;
   const colorHex = '#' + player.color.toString(16).padStart(6, '0');
-  ws.send(JSON.stringify({ type: 'trace', x: +p.x.toFixed(2), z: +p.z.toFixed(2), y: +p.y.toFixed(2), text, color: colorHex }));
-  addTrace(p.x, p.z, p.y, text, colorHex);
+  ws.send(JSON.stringify({ type: 'trace', x: +p.x.toFixed(2), z: +p.z.toFixed(2), y: +p.y.toFixed(2), text, color: colorHex, name: playerName }));
+  addTrace(p.x, p.z, p.y, text, colorHex, playerName);
 }
 
 let tracePrompt = false;
@@ -1697,11 +1749,12 @@ function updateOnlineHUD() {
   _onlineHudCount = count; _onlineHudConnected = wsConnected;
   onlineDot.className = 'dot ' + (wsConnected ? 'on' : 'off');
   onlineStatus.textContent = wsConnected ? count + ' online' : 'offline';
-  onlineName.textContent = playerName;
-  let sq = '<span class="psq" style="background:#' + player.color.toString(16).padStart(6, '0') + '"></span>';
+  onlineName.textContent = '';
+  let sq = '<span class="psq" style="background:#' + player.color.toString(16).padStart(6, '0') + '" title="' + playerName + ' (you)"></span> <span style="font-size:10px;opacity:0.8;">' + playerName + ' (you)</span><br>';
   for (const id in remotePlayers) {
     const c = remotePlayers[id].color || 0x888888;
-    sq += '<span class="psq" style="background:#' + c.toString(16).padStart(6, '0') + '"></span>';
+    const rn = remotePlayers[id].name || '?';
+    sq += '<span class="psq" style="background:#' + c.toString(16).padStart(6, '0') + '"></span> <span style="font-size:10px;opacity:0.8;">' + rn + '</span><br>';
   }
   onlineSquares.innerHTML = sq;
 }
@@ -1864,8 +1917,15 @@ window.addEventListener('keydown', onFirstInteraction);
 window.addEventListener('touchstart', onFirstInteraction);
 
 function startGame(role) {
+  const inp = document.getElementById('cs-name-input');
+  if (inp && inp.value.trim()) {
+    playerName = inp.value.trim().slice(0, 20);
+    localStorage.setItem('vp_playerName', playerName);
+    player.name = playerName;
+  }
   playerRole = role;
   document.getElementById('char-select').style.display = 'none';
+  updateLivesHUD();
   if (role === 'duck') {
     // replace player mesh with crab
     scene.remove(player.mesh);
@@ -1879,10 +1939,56 @@ function startGame(role) {
   connectWS();
   const msgBtn = document.getElementById('msg-log-btn');
   if (msgBtn) msgBtn.style.display = 'block';
+  // mobile button setup
+  const isMobile = window.matchMedia('(hover:none) and (pointer:coarse)').matches;
+  if (isMobile) {
+    const fBtn = document.getElementById('mobile-flap');
+    const fBaz = document.getElementById('mobile-fire');
+    const fRkt = document.getElementById('mobile-rocket');
+    if (role === 'duck') {
+      if (fBtn) fBtn.style.display = 'none';
+      if (fBaz) fBaz.style.display = 'block';
+      if (fRkt) fRkt.style.display = 'block';
+    } else {
+      if (fBtn) { fBtn.style.display = 'block'; fBtn.textContent = 'FLAP'; }
+      if (fBaz) fBaz.style.display = 'none';
+      if (fRkt) fRkt.style.display = 'none';
+    }
+  }
 }
 
 document.getElementById('btn-bird').addEventListener('click', () => startGame('bird'));
 document.getElementById('btn-duck').addEventListener('click', () => startGame('duck'));
+document.getElementById('go-restart')?.addEventListener('click', () => location.reload());
+
+function updateLivesHUD() {
+  const el = document.getElementById('hud-lives');
+  if (!el) return;
+  el.textContent = '♥'.repeat(Math.max(0, player.lives));
+  el.style.color = player.lives > 1 ? '#ff4444' : (player.lives === 1 ? '#ff0000' : '#333');
+}
+
+function onPlayerHit(fromName) {
+  if (!playerRole || player.lives <= 0) return;
+  player.lives--;
+  updateLivesHUD();
+  showZoneFlash('💥 HIT BY ' + fromName + '!', '#ff2200');
+  if (player.lives <= 0) { showGameOver(fromName); return; }
+  if (player.gems > 0) { player.gems = 0; nestState.carried = 0; updateNestHUD(); }
+  player.mesh.position.set(rand(-8, 8), CFG.spawnY, rand(-8, 8));
+  player.vel.set(0, 0, 0);
+  player.bankAngle = 0;
+  camState.smoothPos.copy(player.mesh.position);
+  showZoneFlash('respawn — ' + player.lives + ' ♥ left', '#4ade80');
+}
+
+function showGameOver(killerName) {
+  const el = document.getElementById('game-over');
+  if (!el) return;
+  document.getElementById('go-msg').textContent = killerName ? 'killed by ' + killerName : 'no lives left';
+  el.style.display = 'flex';
+  roundInProgress = false;
+}
 
 // ── NEST WARS ───────────────────────────────────────────
 const NEST_WIN = 15;
@@ -1983,28 +2089,32 @@ function animate() {
     const duckFwdSpd = duckSpd * 0.8;  // fwd slightly slower but still fast
     let strafeDir = 0;
     let duckMoving = false;
-    // A/D → strafe left/right (primary crab movement)
-    if (keys['KeyA']) {
-      // strafe left — move along local -X axis
-      player.mesh.position.x -= Math.cos(duckYaw) * duckSpd * dt;
-      player.mesh.position.z += Math.sin(duckYaw) * duckSpd * dt;
+    // A/D → strafe left/right (primary crab movement) + joystick X
+    const joyStrafe = Math.abs(joyX) > 0.2 ? joyX : 0;
+    const joyFwd = Math.abs(joyY) > 0.2 ? joyY : 0;
+    if (keys['KeyA'] || joyStrafe < -0.2) {
+      const mag = keys['KeyA'] ? 1 : Math.abs(joyStrafe);
+      player.mesh.position.x -= Math.cos(duckYaw) * duckSpd * dt * mag;
+      player.mesh.position.z += Math.sin(duckYaw) * duckSpd * dt * mag;
       duckMoving = true; strafeDir = -1;
     }
-    if (keys['KeyD']) {
-      // strafe right — move along local +X axis
-      player.mesh.position.x += Math.cos(duckYaw) * duckSpd * dt;
-      player.mesh.position.z -= Math.sin(duckYaw) * duckSpd * dt;
+    if (keys['KeyD'] || joyStrafe > 0.2) {
+      const mag = keys['KeyD'] ? 1 : joyStrafe;
+      player.mesh.position.x += Math.cos(duckYaw) * duckSpd * dt * mag;
+      player.mesh.position.z -= Math.sin(duckYaw) * duckSpd * dt * mag;
       duckMoving = true; strafeDir = 1;
     }
-    // W/S → forward/backward (slower, secondary)
-    if (keys['KeyW'] || keys['ArrowUp']) {
-      player.mesh.position.x -= Math.sin(duckYaw) * duckFwdSpd * dt;
-      player.mesh.position.z -= Math.cos(duckYaw) * duckFwdSpd * dt;
+    // W/S → forward/backward (slower, secondary) + joystick Y
+    if (keys['KeyW'] || keys['ArrowUp'] || joyFwd < -0.2) {
+      const mag = (keys['KeyW'] || keys['ArrowUp']) ? 1 : Math.abs(joyFwd);
+      player.mesh.position.x -= Math.sin(duckYaw) * duckFwdSpd * dt * mag;
+      player.mesh.position.z -= Math.cos(duckYaw) * duckFwdSpd * dt * mag;
       duckMoving = true;
     }
-    if (keys['KeyS'] || keys['ArrowDown']) {
-      player.mesh.position.x += Math.sin(duckYaw) * duckFwdSpd * dt;
-      player.mesh.position.z += Math.cos(duckYaw) * duckFwdSpd * dt;
+    if (keys['KeyS'] || keys['ArrowDown'] || joyFwd > 0.2) {
+      const mag = (keys['KeyS'] || keys['ArrowDown']) ? 1 : joyFwd;
+      player.mesh.position.x += Math.sin(duckYaw) * duckFwdSpd * dt * mag;
+      player.mesh.position.z += Math.cos(duckYaw) * duckFwdSpd * dt * mag;
       duckMoving = true;
     }
     const dl = player.mesh.position.length();
@@ -2132,7 +2242,7 @@ function animate() {
     player.mesh.position.y = floorY;
     player.vel.x *= 0.05;
     player.vel.z *= 0.05;
-    if (player.vel.y < 0) player.vel.y = 0;
+    player.vel.y = 0;
     player.speed *= 0.05;          // kill speed → kills lift next frame
     player.pitchAngle = lerp(player.pitchAngle, 0, 12 * dt);
     player.bankAngle  = lerp(player.bankAngle,  0, 12 * dt);
