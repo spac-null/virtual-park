@@ -75,12 +75,16 @@ canvas{display:block;cursor:none;position:fixed;top:0;left:0}
 #joy-base{width:120px;height:120px;border-radius:50%;background:rgba(0,100,200,0.15);border:2px solid rgba(0,100,200,0.4)}
 #joy-thumb{position:absolute;top:50%;left:50%;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;background:rgba(0,100,200,0.35);border:2px solid rgba(0,150,255,0.6)}
 .mob-btn{position:absolute;z-index:15;border-radius:50%;display:none;pointer-events:auto;touch-action:none;font-family:'Courier New',monospace;text-transform:uppercase;letter-spacing:1px;text-align:center;color:#fff;font-size:10px}
-#mobile-flap{bottom:100px;right:20px;width:70px;height:70px;line-height:70px;background:rgba(0,100,220,0.75);border:2px solid rgba(100,180,255,0.6)}
-#mobile-egg{bottom:185px;right:20px;width:60px;height:60px;line-height:60px;background:rgba(180,140,0,0.8);border:2px solid rgba(255,210,0,0.6)}
-#mobile-fire{bottom:100px;right:20px;width:70px;height:70px;line-height:70px;background:rgba(255,100,0,0.75);border:2px solid rgba(255,160,0,0.6)}
-#mobile-rocket{bottom:185px;right:20px;width:60px;height:60px;line-height:60px;background:rgba(200,0,0,0.8);border:2px solid rgba(255,80,80,0.6)}
-#mobile-chat{bottom:24px;left:50%;transform:translateX(-50%);width:54px;height:54px;line-height:54px;background:rgba(30,30,60,0.75);border:2px solid rgba(150,180,255,0.4);font-size:18px}
-#hint{display:none}
+/* right side action buttons — stacked bottom to top */
+#mobile-flap{bottom:110px;right:20px;width:76px;height:76px;line-height:76px;background:rgba(0,100,220,0.82);border:2px solid rgba(100,180,255,0.7)}
+#mobile-egg{bottom:202px;right:20px;width:62px;height:62px;line-height:62px;background:rgba(180,140,0,0.85);border:2px solid rgba(255,210,0,0.7)}
+#mobile-hover{bottom:278px;right:20px;width:52px;height:52px;line-height:52px;background:rgba(80,80,200,0.75);border:2px solid rgba(160,160,255,0.6);font-size:16px}
+#mobile-fire{bottom:110px;right:20px;width:76px;height:76px;line-height:76px;background:rgba(255,100,0,0.82);border:2px solid rgba(255,160,0,0.7)}
+#mobile-rocket{bottom:202px;right:20px;width:62px;height:62px;line-height:62px;background:rgba(200,0,0,0.85);border:2px solid rgba(255,80,80,0.7)}
+#mobile-jump{bottom:278px;right:20px;width:52px;height:52px;line-height:52px;background:rgba(0,160,80,0.8);border:2px solid rgba(80,255,140,0.6);font-size:16px}
+/* chat bottom-center, above joystick area */
+#mobile-chat{bottom:160px;left:20px;width:52px;height:52px;line-height:52px;background:rgba(30,30,60,0.78);border:2px solid rgba(150,180,255,0.45);font-size:18px}
+#hint{display:block}
 
 .name-label{position:absolute;z-index:8;pointer-events:none;font-family:'Courier New',monospace;font-size:13px;font-weight:bold;color:#ffffff;text-shadow:0 0 4px #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;white-space:nowrap;transform:translate(-50%,-100%);letter-spacing:0.5px}
 #char-select{position:absolute;top:0;left:0;width:100%;height:100%;background:#4488dd;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:50;font-family:'Courier New',monospace}
@@ -161,8 +165,10 @@ canvas{display:block;cursor:none;position:fixed;top:0;left:0}
 <div id="mobile-joy"><div id="joy-base"><div id="joy-thumb"></div></div></div>
 <div id="mobile-flap" class="mob-btn">FLAP</div>
 <div id="mobile-egg" class="mob-btn">EGG</div>
+<div id="mobile-hover" class="mob-btn">◈</div>
 <div id="mobile-fire" class="mob-btn">FIRE</div>
 <div id="mobile-rocket" class="mob-btn">🚀</div>
+<div id="mobile-jump" class="mob-btn">↑</div>
 <div id="mobile-chat" class="mob-btn">💬</div>
 
 <div id="msg-log" style="position:absolute;bottom:14px;right:14px;z-index:10;pointer-events:auto;width:280px;max-height:320px;background:rgba(10,10,30,0.82);border:1px solid rgba(100,150,255,0.25);border-radius:8px;overflow:hidden;display:none;flex-direction:column;">
@@ -762,7 +768,7 @@ if (joyBase) {
   const maxR = 40;
   function joyMove(cx, cy) {
     const rect = joyBase.getBoundingClientRect();
-    const dx = cx - rect.left - 55, dy = cy - rect.top - 55;
+    const dx = cx - rect.left - 60, dy = cy - rect.top - 60;
     const dist = Math.sqrt(dx * dx + dy * dy);
     const clamped = Math.min(dist, maxR);
     const angle = Math.atan2(dy, dx);
@@ -794,6 +800,14 @@ if (flapBtn) {
 const eggBtn = document.getElementById('mobile-egg');
 if (eggBtn) {
   eggBtn.addEventListener('touchstart', e => { e.preventDefault(); initAudio(); dropEgg(); });
+}
+const hoverBtn = document.getElementById('mobile-hover');
+if (hoverBtn) {
+  hoverBtn.addEventListener('touchstart', e => { e.preventDefault(); hoverMode = !hoverMode; hoverBtn.style.background = hoverMode ? 'rgba(120,120,255,0.95)' : 'rgba(80,80,200,0.75)'; });
+}
+const jumpBtn = document.getElementById('mobile-jump');
+if (jumpBtn) {
+  jumpBtn.addEventListener('touchstart', e => { e.preventDefault(); initAudio(); if (playerRole === 'duck' && crabJumpVel === 0) { crabJumpVel = 9; player.mesh.position.y += 0.3; playFlap(); } });
 }
 const fireBtn = document.getElementById('mobile-fire');
 if (fireBtn) {
@@ -1997,16 +2011,27 @@ function startGame(role) {
   if (hasTouch) {
     const show = id => { const el = document.getElementById(id); if (el) el.style.display = 'block'; };
     const hide = id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; };
+    // show joystick + chat
     show('mobile-joy');
     show('mobile-chat');
-    document.getElementById('hint') && (document.getElementById('hint').style.display = 'none');
-    document.getElementById('crosshair') && (document.getElementById('crosshair').style.display = 'none');
+    // hide desktop-only elements that overlap mobile controls
+    hide('gem-radar');
+    hide('speed-dots');
+    hide('alt-bar');
+    hide('hint');
+    hide('crosshair');
+    // move nestHud to top so it doesn't overlap joystick
+    if (nestHudEl) { nestHudEl.style.bottom = ''; nestHudEl.style.top = '48px'; nestHudEl.style.left = '14px'; }
+    // move chat-toast to top-center on mobile
+    const toastEl2 = document.getElementById('chat-toast');
+    if (toastEl2) { toastEl2.style.bottom = ''; toastEl2.style.top = '80px'; }
+    // role-specific buttons
     if (role === 'duck') {
-      hide('mobile-flap'); hide('mobile-egg');
-      show('mobile-fire'); show('mobile-rocket');
+      hide('mobile-flap'); hide('mobile-egg'); hide('mobile-hover');
+      show('mobile-fire'); show('mobile-rocket'); show('mobile-jump');
     } else {
-      show('mobile-flap'); show('mobile-egg');
-      hide('mobile-fire'); hide('mobile-rocket');
+      show('mobile-flap'); show('mobile-egg'); show('mobile-hover');
+      hide('mobile-fire'); hide('mobile-rocket'); hide('mobile-jump');
     }
   }
 }
@@ -2207,11 +2232,11 @@ function animate() {
   const rollRate  = 3.0;
 
   if (!player.landed) {
-  // pitch
-  if (keys['KeyW'] || keys['ArrowUp'] || joyY < -0.2)
-    player.pitchAngle -= pitchRate * dt * (joyY < -0.2 ? Math.abs(joyY) : 1);
-  if (keys['KeyS'] || keys['ArrowDown'] || joyY > 0.2)
-    player.pitchAngle += pitchRate * dt * (joyY > 0.2 ? joyY : 1);
+  // pitch — keyboard W=dive/S=climb (flight sim), joystick inverted (up=climb feels natural)
+  if (keys['KeyW'] || keys['ArrowUp']) player.pitchAngle -= pitchRate * dt;
+  if (keys['KeyS'] || keys['ArrowDown']) player.pitchAngle += pitchRate * dt;
+  if (joyY < -0.2) player.pitchAngle += pitchRate * dt * Math.abs(joyY); // joystick up = climb
+  if (joyY > 0.2)  player.pitchAngle -= pitchRate * dt * joyY;            // joystick down = dive
 
   // bank + direct yaw from joystick (more responsive on mobile)
   if (keys['KeyA'] || keys['ArrowLeft'] || joyX < -0.2) {
