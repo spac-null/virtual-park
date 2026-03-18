@@ -127,6 +127,8 @@ canvas{display:block;cursor:none}
     <tr><td>Q / E</td><td>turn crab left / right</td></tr>
     <tr><td>SPACE</td><td>flap (bird) / dash (crab)</td></tr>
     <tr><td>E</td><td>egg bomb (bird) / trace (crab)</td></tr>
+    <tr><td>H</td><td>hover (freeze in air)</td></tr>
+    <tr><td>M</td><td>message log</td></tr>
     <tr><td>R-drag</td><td>free look</td></tr>
     <tr><td>TAB</td><td>scoreboard</td></tr>
     <tr><td>R</td><td>respawn (if stuck)</td></tr>
@@ -139,6 +141,14 @@ canvas{display:block;cursor:none}
 
 <div id="mobile-joy"><div id="joy-base"><div id="joy-thumb"></div></div></div>
 <div id="mobile-flap">FLAP</div>
+
+<div id="msg-log" style="position:absolute;bottom:14px;right:14px;z-index:10;pointer-events:auto;width:280px;max-height:320px;background:rgba(10,10,30,0.82);border:1px solid rgba(100,150,255,0.25);border-radius:8px;overflow:hidden;display:none;flex-direction:column;">
+  <div style="padding:6px 12px;font-family:'Courier New',monospace;font-size:11px;color:#aabbff;border-bottom:1px solid rgba(100,150,255,0.15);display:flex;justify-content:space-between;align-items:center;">
+    <span>◈ MESSAGES</span><span id="msg-log-close" style="cursor:pointer;opacity:0.6;font-size:14px;">×</span>
+  </div>
+  <div id="msg-log-list" style="overflow-y:auto;max-height:280px;padding:6px 0;"></div>
+</div>
+<div id="msg-log-btn" style="position:absolute;bottom:14px;right:14px;z-index:10;pointer-events:auto;font-family:'Courier New',monospace;font-size:11px;color:#1a1a2e;background:rgba(255,255,255,0.88);border:1px solid rgba(0,100,200,0.2);border-radius:4px;padding:4px 10px;cursor:pointer;display:none;">◈ MSG</div>
 
 <div id="char-select">
   <div class="cs-title">THE GARDEN ABOVE</div>
@@ -679,6 +689,7 @@ window.addEventListener('keydown', e => {
   }
   if ((e.code === 'Space') && playerRole === 'duck') { e.preventDefault(); initAudio(); duckDash(); }
   if ((e.key === 'e' || e.key === 'E') && playerRole === 'bird' && !tracePrompt) { e.preventDefault(); initAudio(); dropEgg(); }
+  if (e.key === 'h' || e.key === 'H') { hoverMode = !hoverMode; }
 });
 window.addEventListener('keyup', e => {
   keys[e.code] = false;
@@ -1360,6 +1371,7 @@ function connectWS() {
 let lastSend = 0;
 let playerRole = null;  // 'bird' | 'duck' — set by char-select
 let duckYaw = 0;
+let hoverMode = false;
 let camShake = 0;
 let bazookaCooldown = 0;
 let eggCooldown = 0;
@@ -1381,6 +1393,40 @@ function sendMove() {
     role: playerRole || 'bird'
   }));
 }
+
+// ── MESSAGE LOG ─────────────────────────────────────────
+const msgLog = [];
+let msgLogOpen = false;
+
+function toggleMsgLog() {
+  msgLogOpen = !msgLogOpen;
+  const panel = document.getElementById('msg-log');
+  const btn = document.getElementById('msg-log-btn');
+  if (panel) panel.style.display = msgLogOpen ? 'flex' : 'none';
+  if (btn) btn.style.display = msgLogOpen ? 'none' : 'block';
+}
+
+function pushMsgLog(text, color) {
+  const now = new Date();
+  const ts = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+  msgLog.unshift({ text, color: color || '#ffffff', ts });
+  if (msgLog.length > 20) msgLog.pop();
+  if (msgLogOpen) renderMsgLog();
+}
+
+function renderMsgLog() {
+  const list = document.getElementById('msg-log-list');
+  if (!list) return;
+  list.innerHTML = msgLog.map(m =>
+    `<div style="padding:4px 12px;border-bottom:1px solid rgba(255,255,255,0.05);font-family:'Courier New',monospace;font-size:11px;">
+      <span style="color:rgba(255,255,255,0.35);font-size:10px;">${m.ts}</span>
+      <span style="color:${m.color};margin-left:4px;">${m.text}</span>
+    </div>`
+  ).join('');
+}
+
+document.getElementById('msg-log-btn')?.addEventListener('click', toggleMsgLog);
+document.getElementById('msg-log-close')?.addEventListener('click', toggleMsgLog);
 
 // ── TRACES ──────────────────────────────────────────────
 const traces = [];
@@ -1432,6 +1478,7 @@ function addTrace(x, z, y, text, color) {
   g.position.set(x, groundSnap, z);
   scene.add(g);
   traces.push({ group: g, life: 120, text });  // 2 min lifetime
+  pushMsgLog(text, color);
 }
 
 function sendTrace(text) {
@@ -1450,6 +1497,7 @@ window.addEventListener('keydown', e => {
     if (t) sendTrace(t);
     tracePrompt = false;
   }
+  if (e.key === 'm' || e.key === 'M') toggleMsgLog();
   // R = emergency respawn (if stuck at wall or anything else)
   if (e.key === 'r' || e.key === 'R') {
     player.mesh.position.set(rand(-8, 8), CFG.spawnY, rand(-8, 8));
@@ -1719,6 +1767,8 @@ function startGame(role) {
   initAudio();
   initGems();
   connectWS();
+  const msgBtn = document.getElementById('msg-log-btn');
+  if (msgBtn) msgBtn.style.display = 'block';
 }
 
 document.getElementById('btn-bird').addEventListener('click', () => startGame('bird'));
@@ -1772,6 +1822,12 @@ const nestHudEl = document.createElement('div');
 nestHudEl.style.cssText = 'position:absolute;bottom:110px;left:14px;z-index:10;pointer-events:none;font-family:"Courier New",monospace;font-size:13px;color:#1a1a2e;background:rgba(255,255,255,0.88);border:1px solid rgba(0,100,200,0.2);border-radius:6px;padding:8px 12px;';
 nestHudEl.innerHTML = 'nest: <b>0</b> / ' + NEST_WIN + '<br>carrying: <b>0</b>';
 document.body.appendChild(nestHudEl);
+
+const hoverHudEl = document.createElement('div');
+hoverHudEl.id = 'hover-hud';
+hoverHudEl.style.cssText = 'position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:10;pointer-events:none;font-family:"Courier New",monospace;font-size:12px;color:#1a1a2e;background:rgba(255,255,255,0.85);border:1px solid rgba(0,100,200,0.2);border-radius:4px;padding:3px 10px;display:none;letter-spacing:1px;';
+hoverHudEl.textContent = '◈ HOVER';
+document.body.appendChild(hoverHudEl);
 
 let _nestHudBanked = -1, _nestHudCarried = -1, _nestHudArrowIdx = -1, _nestHudDist = -1;
 const _nestArrows = ['↑','↗','→','↘','↓','↙','←','↖'];
@@ -1911,6 +1967,19 @@ function animate() {
   player.speed -= 1.0 * dt; // air resistance
   player.speed = clamp(player.speed, 0.5, 32);
 
+  if (hoverMode) {
+    // freeze all velocity, gentle bob
+    player.vel.x *= (1 - 12 * dt);
+    player.vel.z *= (1 - 12 * dt);
+    player.vel.y = Math.sin(clock.elapsedTime * 1.2) * 1.5;
+    player.speed = 0;
+    player.pitchAngle = lerp(player.pitchAngle, 0, 5 * dt);
+    player.bankAngle = lerp(player.bankAngle, 0, 5 * dt);
+    // apply just the bob movement
+    _tv1.copy(player.vel).multiplyScalar(dt);
+    player.mesh.position.add(_tv1);
+  } else {
+
   // gravity
   player.vel.y -= 6.0 * dt;
 
@@ -1932,6 +2001,7 @@ function animate() {
   // move
   _tv1.copy(player.vel).multiplyScalar(dt);
   player.mesh.position.add(_tv1);
+  } // end hover else
 
   // terrain collision — bird lands on ground rather than clipping through
   const groundY = terrainY(player.mesh.position.x, player.mesh.position.z);
@@ -2251,6 +2321,8 @@ function animate() {
   sendMove();
   updateHUD(dt);
   updateOnlineHUD();
+  const hoverEl = document.getElementById('hover-hud');
+  if (hoverEl) hoverEl.style.display = (hoverMode && playerRole === 'bird') ? 'block' : 'none';
 
   // ── RENDER ──────────────────────────────────────────
   renderer.render(scene, camera);
