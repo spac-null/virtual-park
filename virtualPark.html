@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
 <title>Virtual Park — Fly</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -18,7 +18,7 @@ canvas{display:block;cursor:none;position:fixed;top:0;left:0}
 #hud-score .hud-gems{font-size:13px;color:#888}
 #hud-score .hud-rank{font-size:11px;color:#aaa;border-left:1px solid rgba(0,0,0,0.1);padding-left:8px}
 
-#hud-online{top:14px;right:14px;background:none;border:none;box-shadow:none;padding:0;display:flex;flex-direction:column;gap:0;align-items:flex-end;font-family:'Courier New',monospace;font-size:11px;pointer-events:none;z-index:10;text-align:right}
+#hud-online{position:absolute;top:14px;right:14px;background:none;border:none;box-shadow:none;padding:0;display:flex;flex-direction:column;gap:0;align-items:flex-end;font-family:'Courier New',monospace;font-size:11px;pointer-events:none;z-index:10;text-align:right}
 #hud-online .online-header{color:#fff;font-size:10px;letter-spacing:2px;text-transform:uppercase;text-shadow:1px 1px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000;margin-bottom:3px;opacity:0.7}
 #hud-online .dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:4px;vertical-align:middle}
 #hud-online .dot.on{background:#44ff88;box-shadow:0 0 4px #44ff88;animation:pulse 2s infinite}
@@ -1878,7 +1878,8 @@ function updateHUD(dt) {
     radarCtx.fillRect(sx - 2, sy - 2, 4, 4);
   }
 
-  // player dots on radar
+  // player dots on radar — real players in their color, NPCs grey
+  const NPC_NAMES = new Set(['oracle-crow','chaos-swift','gravel-crab']);
   for (const id in remotePlayers) {
     const rp = remotePlayers[id];
     const dx = rp.targetPos.x - pp.x, dz = rp.targetPos.z - pp.z;
@@ -1887,8 +1888,16 @@ function updateHUD(dt) {
     const rx = dx * Math.cos(ry) - dz * Math.sin(ry);
     const rz = dx * Math.sin(ry) + dz * Math.cos(ry);
     const sx = 41 + rx / 30 * 38, sy = 41 + rz / 30 * 38;
-    radarCtx.fillStyle = '#1a1a2e';
-    radarCtx.fillRect(sx - 1.5, sy - 1.5, 3, 3);
+    const isNPC = NPC_NAMES.has(rp.name);
+    if (isNPC) {
+      radarCtx.fillStyle = 'rgba(120,120,120,0.5)';
+      radarCtx.fillRect(sx - 1.5, sy - 1.5, 3, 3);
+    } else {
+      radarCtx.fillStyle = '#' + (rp.color || 0x888888).toString(16).padStart(6,'0');
+      radarCtx.beginPath(); radarCtx.arc(sx, sy, 3, 0, Math.PI*2); radarCtx.fill();
+      radarCtx.strokeStyle = '#fff'; radarCtx.lineWidth = 1;
+      radarCtx.stroke();
+    }
   }
 
   // nest dots — own + remote
@@ -2238,14 +2247,16 @@ function animate() {
   if (joyY < -0.2) player.pitchAngle += pitchRate * dt * Math.abs(joyY); // joystick up = climb
   if (joyY > 0.2)  player.pitchAngle -= pitchRate * dt * joyY;            // joystick down = dive
 
-  // bank + direct yaw from joystick (more responsive on mobile)
-  if (keys['KeyA'] || keys['ArrowLeft'] || joyX < -0.2) {
-    player.bankAngle -= rollRate * dt * (joyX < -0.2 ? Math.abs(joyX) : 1);
-    if (joyX < -0.2) player.mesh.rotation.y += Math.abs(joyX) * 1.8 * dt;
+  // bank + yaw — desktop: bank drives yaw (flight sim feel); mobile: direct yaw only, bank is cosmetic
+  if (keys['KeyA'] || keys['ArrowLeft']) player.bankAngle -= rollRate * dt;
+  if (keys['KeyD'] || keys['ArrowRight']) player.bankAngle += rollRate * dt;
+  if (joyX < -0.2) {
+    player.bankAngle -= rollRate * dt * Math.abs(joyX);
+    player.mesh.rotation.y += Math.abs(joyX) * 2.5 * dt; // direct yaw on mobile
   }
-  if (keys['KeyD'] || keys['ArrowRight'] || joyX > 0.2) {
-    player.bankAngle += rollRate * dt * (joyX > 0.2 ? joyX : 1);
-    if (joyX > 0.2) player.mesh.rotation.y -= joyX * 1.8 * dt;
+  if (joyX > 0.2) {
+    player.bankAngle += rollRate * dt * joyX;
+    player.mesh.rotation.y -= joyX * 2.5 * dt;
   }
   } // end !landed input block
 
@@ -2273,8 +2284,10 @@ function animate() {
     -Math.cos(yaw) * Math.cos(player.pitchAngle)
   ).normalize();
 
-  // yaw from bank
-  player.mesh.rotation.y -= player.bankAngle * yawRate * dt;
+  // yaw from bank — desktop only; mobile uses direct joyX yaw above
+  if (!('ontouchstart' in window) && navigator.maxTouchPoints === 0) {
+    player.mesh.rotation.y -= player.bankAngle * yawRate * dt;
+  }
 
   if (!player.landed) {
   // speed: dive accelerates, climb decelerates
@@ -2658,23 +2671,34 @@ function animate() {
 
 animate();
 
-// ── RESIZE ──────────────────────────────────────────────
-// Lock viewport size — on mobile, ignore height-only changes (URL bar show/hide)
+// ── RESIZE + VIEWPORT LOCK ───────────────────────────────
 const _initW = window.innerWidth, _initH = window.innerHeight;
 let _lockedH = _initH;
 function getH() { return (navigator.maxTouchPoints > 0) ? _lockedH : window.innerHeight; }
-renderer.setSize(_initW, _lockedH);
-camera.aspect = _initW / _lockedH;
-camera.updateProjectionMatrix();
+
+// Pin body + canvas to exact pixel size so URL bar can't shift anything
+function applyViewportLock(w, h) {
+  document.body.style.width  = w + 'px';
+  document.body.style.height = h + 'px';
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+applyViewportLock(_initW, _lockedH);
+
 window.addEventListener('resize', () => {
   const w = window.innerWidth, h = window.innerHeight;
-  // on touch devices only update if width changed (rotation) or height grew (URL bar hid → actual resize)
-  if (navigator.maxTouchPoints > 0 && w === _initW && h < _lockedH) return;
-  if (navigator.maxTouchPoints > 0 && w !== _initW) _lockedH = h; // rotation — update locked height
-  camera.aspect = w / getH();
-  camera.updateProjectionMatrix();
-  renderer.setSize(w, getH());
+  if (navigator.maxTouchPoints > 0) {
+    if (w === _lockedW && h < _lockedH) return; // URL bar hiding — ignore
+    _lockedH = h; // rotation or real resize
+  }
+  applyViewportLock(w, getH());
 });
+// also suppress visualViewport changes (iOS Safari inner scroll)
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', e => { e.stopPropagation(); });
+}
+const _lockedW = _initW;
 </script>
 </body>
 </html>
