@@ -422,6 +422,7 @@ const player = {
   flapTimer: 0,
   isFlapping: false,
   flapAnim: 0,
+  hitFlash: 0,
   color: 0x00b3ff,
   name: playerName
 };
@@ -1044,6 +1045,13 @@ const _tv1 = new THREE.Vector3();
 const _tv2 = new THREE.Vector3();
 const _camEuler = new THREE.Euler();
 
+// ── CAMERA STATE ─────────────────────────────────────────
+// Smooth yaw prevents shake when bird turns sharply
+const camState = {
+  yaw: 0,          // lagged behind player.mesh.rotation.y
+  smoothPos: new THREE.Vector3(0, CFG.spawnY, 0)
+};
+
 // ── ARCH COLLISION COOLDOWNS ────────────────────────────
 const archCooldowns = new Float32Array(archZones.length);
 
@@ -1114,42 +1122,80 @@ function animate() {
   player.mesh.rotation.y -= player.bankAngle * yawRate * dt;
 
   // speed: dive accelerates, climb decelerates
-  player.speed += player.facing.y * -3.0 * dt;
-  player.speed -= 1.2 * dt; // air resistance
+  player.speed += player.facing.y * -2.5 * dt;
+  player.speed -= 1.0 * dt; // air resistance
   player.speed = clamp(player.speed, 1.5, 28);
 
   // gravity
-  player.vel.y -= 9.5 * dt;
+  player.vel.y -= 6.0 * dt;
 
-  // lift from speed and pitch
-  const lift = player.speed * 1.1 + player.pitchAngle * -4;
+  // lift — sustain level flight around speed 8+
+  const lift = player.speed * 0.85 + player.pitchAngle * -2.5;
   player.vel.y += lift * dt;
 
-  // forward motion
+  // forward thrust — ALL 3 axes so pitch actually drives dive/climb
   player.vel.x += player.facing.x * player.speed * 2.5 * dt;
+  player.vel.y += player.facing.y * player.speed * 1.8 * dt;  // pitch = vertical thrust
   player.vel.z += player.facing.z * player.speed * 2.5 * dt;
 
-  // horizontal drag
-  player.vel.x *= (1 - 1.8 * dt);
-  player.vel.z *= (1 - 1.8 * dt);
+  // drag (all axes)
+  player.vel.x *= (1 - 1.6 * dt);
+  player.vel.z *= (1 - 1.6 * dt);
+  player.vel.y *= (1 - 0.4 * dt);
   player.vel.y = clamp(player.vel.y, -22, 18);
 
   // move
   _tv1.copy(player.vel).multiplyScalar(dt);
   player.mesh.position.add(_tv1);
 
-  // world bounds
-  if (player.mesh.position.length() > 88) {
-    _tv1.copy(player.mesh.position).normalize().multiplyScalar(-6);
-    player.vel.add(_tv1);
+  // world bounds — bounce back, don't stick
+  const posLen = player.mesh.position.length();
+  if (posLen > 85) {
+    // Reflect velocity away from boundary and push hard inward
+    _tv1.copy(player.mesh.position).normalize();
+    const inward = -player.vel.dot(_tv1);
+    if (inward < 0) player.vel.addScaledVector(_tv1, -inward * 1.8 + 8);
+    player.vel.addScaledVector(_tv1, -12); // strong push toward center
+    player.speed *= 0.6;
   }
   if (player.mesh.position.y < CFG.floorY) {
-    player.mesh.position.y = CFG.floorY;
-    player.vel.y = Math.max(player.vel.y, 1);
+    player.mesh.position.y = CFG.floorY + 0.5;
+    player.vel.y = Math.abs(player.vel.y) * 0.5 + 3; // bounce up
+    player.pitchAngle = Math.max(player.pitchAngle, -0.2); // nose up
   }
   if (player.mesh.position.y > CFG.ceilY + 5) {
-    player.vel.y = Math.min(player.vel.y, -2);
+    player.vel.y = -(Math.abs(player.vel.y) * 0.5 + 2); // bounce down
+    player.pitchAngle = Math.min(player.pitchAngle, 0.2);
   }
+
+  // ── BIRD COLLISION ───────────────────────────────────
+  // vs remote players
+  for (const id in remotePlayers) {
+    const rp = remotePlayers[id];
+    _tv1.copy(player.mesh.position).sub(rp.mesh.position);
+    const dist = _tv1.length();
+    if (dist < 3.5 && dist > 0.01) {
+      const push = 14 * (3.5 - dist) / 3.5;
+      _tv1.normalize().multiplyScalar(push);
+      player.vel.add(_tv1);
+      // Both birds flash white briefly
+      if (!player.hitFlash) { player.hitFlash = 0.3; showZoneFlash('💥 bump!', '#ff6600'); }
+    }
+  }
+  // vs NPC birds
+  for (let i = 0; i < npcBirds.length; i++) {
+    _tv1.copy(player.mesh.position).sub(npcBirds[i].pos);
+    const dist = _tv1.length();
+    if (dist < 3.0 && dist > 0.01) {
+      const push = 10 * (3.0 - dist) / 3.0;
+      _tv1.normalize().multiplyScalar(push);
+      player.vel.add(_tv1);
+      // Scatter the NPC
+      npcBirds[i].vel.copy(_tv1).multiplyScalar(-3);
+    }
+  }
+  // Hit flash timer
+  if (player.hitFlash > 0) { player.hitFlash -= dt; }
 
   // ── BIRD MESH ORIENTATION ───────────────────────────
   player.mesh.rotation.z = -player.bankAngle * 0.7;
@@ -1188,24 +1234,34 @@ function animate() {
   }
 
   // ── CAMERA ──────────────────────────────────────────
-  _tv1.set(0, 2.5, 11);
-  _camEuler.set(0, player.mesh.rotation.y, 0);
-  _tv1.applyEuler(_camEuler);
-  _tv2.copy(player.mesh.position).add(_tv1);
-  camera.position.lerp(_tv2, 8 * dt);
+  // Lag camera yaw behind bird — prevents shake on sharp turns
+  let dyaw = player.mesh.rotation.y - camState.yaw;
+  while (dyaw > Math.PI)  dyaw -= Math.PI * 2;
+  while (dyaw < -Math.PI) dyaw += Math.PI * 2;
+  camState.yaw += dyaw * Math.min(3.5 * dt, 1);
 
+  // Smooth target position (spring-arm, not instant snap)
+  camState.smoothPos.lerp(player.mesh.position, Math.min(6 * dt, 1));
+
+  // Camera sits behind+above bird using lagged yaw
+  _tv1.set(0, 3, 13);
+  _camEuler.set(0, camState.yaw, 0);
+  _tv1.applyEuler(_camEuler);
+  _tv2.copy(camState.smoothPos).add(_tv1);
+  camera.position.lerp(_tv2, Math.min(4 * dt, 1));  // softer follow = no shake
+
+  // Look target: ahead of bird + slight altitude bias from pitch
   if (mouseRightDown) {
     _tv1.copy(player.mesh.position);
-    _tv1.x += Math.sin(player.mesh.rotation.y + freeLookYaw) * 6;
-    _tv1.z += Math.cos(player.mesh.rotation.y + freeLookYaw) * 6;
-    _tv1.y += freeLookPitch * 6 + 1;
-    camera.lookAt(_tv1);
+    _tv1.x += Math.sin(player.mesh.rotation.y + freeLookYaw) * 7;
+    _tv1.z += Math.cos(player.mesh.rotation.y + freeLookYaw) * 7;
+    _tv1.y += freeLookPitch * 6 + 1.5;
   } else {
-    _tv1.copy(player.mesh.position).addScaledVector(player.facing, 6);
-    _tv1.y += 1;
-    camera.lookAt(_tv1);
+    _tv1.copy(player.mesh.position).addScaledVector(player.facing, 7);
+    _tv1.y += 1.5 + player.pitchAngle * 2; // camera tilts with pitch — feels responsive
   }
-  camera.rotation.z = lerp(camera.rotation.z, -player.bankAngle * 0.25, 5 * dt);
+  camera.lookAt(_tv1);
+  // No rotation.z — lookAt handles full orientation cleanly, no fighting
 
   // ── GEMS UPDATE ─────────────────────────────────────
   for (let gi = 0; gi < gems.length; gi++) {
