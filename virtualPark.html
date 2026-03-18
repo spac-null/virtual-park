@@ -292,6 +292,31 @@
             align-items: center;
             gap: 5px;
         }
+        #multiplayer-status {
+            position: fixed;
+            top: 1.5rem;
+            right: 1.5rem;
+            font-family: 'IBM Plex Mono', 'Courier New', monospace;
+            font-size: 0.625rem;
+            letter-spacing: 0.08em;
+            color: rgba(255,255,255,0.4);
+            z-index: 100;
+            text-align: right;
+            line-height: 1.6;
+        }
+        #multiplayer-status.connected { color: #6bff6b; }
+        .remote-name-label {
+            position: fixed;
+            font-family: 'IBM Plex Mono', 'Courier New', monospace;
+            font-size: 0.5rem;
+            letter-spacing: 0.06em;
+            color: #fff;
+            text-shadow: 0 0 4px #000;
+            pointer-events: none;
+            transform: translate(-50%, -100%);
+            white-space: nowrap;
+            z-index: 50;
+        }
     </style>
 </head>
 <body>
@@ -358,6 +383,8 @@
         <div id="scoreboard-list"></div>
         <p style="font-size:12px;color:#aaa;">Press TAB to close</p>
     </div>
+
+    <div id="multiplayer-status">○ connecting...</div>
 
     <div id="mobile-controls">
         <div id="up-btn" class="control-btn">⬆️</div>
@@ -951,6 +978,7 @@
                             loadingScreen.style.display = 'none';
                         }
                         showMessage("Welcome to Virtual Park! Collect all 10 gems.", 5000);
+                        if (typeof connectWs === 'function') connectWs();
                     }, 500);
                 }
             } catch (error) {
@@ -961,6 +989,7 @@
                     if (loadingScreen) {
                         loadingScreen.style.display = 'none';
                     }
+                    if (typeof connectWs === 'function') connectWs();
                 }, 5000);
             }
         }
@@ -2760,6 +2789,9 @@
             if (text) {
                 traceSystem.save(birdGroup.position.x, birdGroup.position.z, text);
                 showMessage("Trace left!");
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({type: 'trace', x: birdGroup.position.x, z: birdGroup.position.z, text: text}));
+                }
             }
             document.getElementById('trace-overlay').style.display = 'none';
             document.getElementById('trace-text').value = '';
@@ -2770,6 +2802,188 @@
             document.getElementById('trace-text').value = '';
             traceOverlayOpen = false;
         });
+
+        // ---- Multiplayer WebSocket system ----
+        const adjectives = ['swift','quiet','bold','small','bright','dark','soft','quick'];
+        const nouns = ['bird','leaf','stone','cloud','wind','spark','echo','wave'];
+        let playerName = localStorage.getItem('virtualPark_playerName');
+        if (!playerName) {
+            playerName = adjectives[Math.floor(Math.random()*adjectives.length)] + '-' + nouns[Math.floor(Math.random()*nouns.length)];
+            localStorage.setItem('virtualPark_playerName', playerName);
+        }
+
+        let ws = null;
+        let lastSendTime = 0;
+        let wsReconnectTimer = null;
+        const remotePlayers = new Map();
+        const mpStatus = document.getElementById('multiplayer-status');
+
+        function updateMpStatus() {
+            const count = remotePlayers.size + 1;
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                mpStatus.className = 'connected';
+                mpStatus.innerHTML = '● LIVE &mdash; ' + count + ' online<br>You: ' + playerName;
+            } else {
+                mpStatus.className = '';
+                mpStatus.innerHTML = '○ offline<br>You: ' + playerName;
+            }
+        }
+
+        function createRemoteBird(color) {
+            const g = new THREE.Group();
+            const mat = new THREE.MeshLambertMaterial({ color: new THREE.Color(color) });
+            const body = new THREE.Mesh(new THREE.BoxGeometry(1, 0.5, 1.5), mat);
+            body.castShadow = true;
+            g.add(body);
+            const lw = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.1, 0.8), mat);
+            lw.position.set(-0.8, 0, 0);
+            g.add(lw);
+            const rw = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.1, 0.8), mat);
+            rw.position.set(0.8, 0, 0);
+            g.add(rw);
+            const bk = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.5, 4), materials.beak);
+            bk.position.set(0, 0, 0.8);
+            bk.rotation.x = Math.PI / 2;
+            g.add(bk);
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+            const le = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), eyeMat);
+            le.position.set(-0.3, 0.1, 0.6);
+            g.add(le);
+            const re = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), eyeMat);
+            re.position.set(0.3, 0.1, 0.6);
+            g.add(re);
+            g.scale.set(0.8, 0.8, 0.8);
+            return { group: g, leftWing: lw, rightWing: rw };
+        }
+
+        function addRemotePlayer(id, x, z, rotY, color, name) {
+            if (remotePlayers.has(id)) return;
+            const bird = createRemoteBird(color);
+            bird.group.position.set(x, 2, z);
+            bird.group.rotation.y = rotY || 0;
+            scene.add(bird.group);
+            const label = document.createElement('div');
+            label.className = 'remote-name-label';
+            label.textContent = name || id.slice(0, 6);
+            document.body.appendChild(label);
+            remotePlayers.set(id, {
+                mesh: bird.group, leftWing: bird.leftWing, rightWing: bird.rightWing,
+                targetX: x, targetZ: z, targetRotY: rotY || 0,
+                nameLabel: label, color: color, name: name || id.slice(0, 6)
+            });
+            updateMpStatus();
+        }
+
+        function removeRemotePlayer(id) {
+            const rp = remotePlayers.get(id);
+            if (!rp) return;
+            scene.remove(rp.mesh);
+            if (rp.nameLabel && rp.nameLabel.parentNode) rp.nameLabel.parentNode.removeChild(rp.nameLabel);
+            remotePlayers.delete(id);
+            updateMpStatus();
+        }
+
+        function connectWs() {
+            if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+            try {
+                ws = new WebSocket('wss://park.jaschablume.nl');
+            } catch(e) {
+                updateMpStatus();
+                scheduleReconnect();
+                return;
+            }
+            mpStatus.innerHTML = '○ connecting...<br>You: ' + playerName;
+            mpStatus.className = '';
+
+            ws.onopen = function() {
+                updateMpStatus();
+            };
+
+            ws.onmessage = function(ev) {
+                let msg;
+                try { msg = JSON.parse(ev.data); } catch(e) { return; }
+                switch(msg.type) {
+                    case 'welcome':
+                        if (msg.players) msg.players.forEach(p => addRemotePlayer(p.id, p.x, p.z, p.rotY, p.color, p.name));
+                        updateMpStatus();
+                        break;
+                    case 'join':
+                        addRemotePlayer(msg.id, msg.x, msg.z, msg.rotY, msg.color, msg.name);
+                        break;
+                    case 'update':
+                        const rp = remotePlayers.get(msg.id);
+                        if (rp) { rp.targetX = msg.x; rp.targetZ = msg.z; rp.targetRotY = msg.rotY; }
+                        else addRemotePlayer(msg.id, msg.x, msg.z, msg.rotY, msg.color, msg.name);
+                        break;
+                    case 'leave':
+                        removeRemotePlayer(msg.id);
+                        break;
+                    case 'trace':
+                        if (msg.id) {
+                            const traceColor = msg.color || '#00ffcc';
+                            const geo = new THREE.CylinderGeometry(0.3, 0.3, 1, 8);
+                            const mat = new THREE.MeshStandardMaterial({
+                                color: new THREE.Color(traceColor),
+                                emissive: new THREE.Color(traceColor),
+                                emissiveIntensity: 0.6,
+                                transparent: true,
+                                opacity: 0.8
+                            });
+                            const marker = new THREE.Mesh(geo, mat);
+                            marker.position.set(msg.x, 0.5, msg.z);
+                            marker.userData.traceText = msg.text;
+                            scene.add(marker);
+                            traceSystem.markers.push(marker);
+                        }
+                        break;
+                }
+            };
+
+            ws.onclose = function() {
+                updateMpStatus();
+                scheduleReconnect();
+            };
+
+            ws.onerror = function() {
+                updateMpStatus();
+            };
+        }
+
+        function scheduleReconnect() {
+            if (wsReconnectTimer) return;
+            wsReconnectTimer = setTimeout(() => {
+                wsReconnectTimer = null;
+                connectWs();
+            }, 5000);
+        }
+
+        function updateRemotePlayers() {
+            remotePlayers.forEach((rp) => {
+                rp.mesh.position.x += (rp.targetX - rp.mesh.position.x) * 0.15;
+                rp.mesh.position.z += (rp.targetZ - rp.mesh.position.z) * 0.15;
+                let dr = rp.targetRotY - rp.mesh.rotation.y;
+                while (dr > Math.PI) dr -= Math.PI * 2;
+                while (dr < -Math.PI) dr += Math.PI * 2;
+                rp.mesh.rotation.y += dr * 0.15;
+                const wingSpeed = Date.now() * 0.008;
+                const wingAmp = 0.3;
+                rp.leftWing.rotation.z = Math.sin(wingSpeed) * wingAmp;
+                rp.rightWing.rotation.z = -Math.sin(wingSpeed) * wingAmp;
+                const pos3 = rp.mesh.position.clone();
+                pos3.y += 2.5;
+                pos3.project(camera);
+                if (pos3.z > 0 && pos3.z < 1) {
+                    const sx = (pos3.x * 0.5 + 0.5) * renderer.domElement.clientWidth;
+                    const sy = (-pos3.y * 0.5 + 0.5) * renderer.domElement.clientHeight;
+                    rp.nameLabel.style.left = sx + 'px';
+                    rp.nameLabel.style.top = sy + 'px';
+                    rp.nameLabel.style.display = '';
+                } else {
+                    rp.nameLabel.style.display = 'none';
+                }
+            });
+        }
+        // ---- End multiplayer system ----
 
         // Score system
         function calculateScore() {
@@ -3679,6 +3893,13 @@
 
             // Update trace labels
             traceSystem.updateLabels(birdGroup.position, camera, renderer);
+
+            // Multiplayer: send position + update remote players
+            if (ws && ws.readyState === WebSocket.OPEN && Date.now() - lastSendTime > 150) {
+                lastSendTime = Date.now();
+                ws.send(JSON.stringify({type: 'move', x: birdGroup.position.x, z: birdGroup.position.z, rotY: birdGroup.rotation.y, name: playerName}));
+            }
+            updateRemotePlayers();
 
             // Update score display periodically
             if (Math.floor(Date.now() / 1000) % 2 === 0) updateScoreDisplay();
