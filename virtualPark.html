@@ -1698,14 +1698,16 @@ function addTrace(x, z, y, text, color, name) {
   });
 
   const tex = new THREE.CanvasTexture(canvas);
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true });
+  const sprite = new THREE.Sprite(spriteMat);
   const aspect = canvas.width / canvas.height;
-  sprite.scale.set(aspect * 0.9, 0.9, 1);
+  sprite.scale.set(aspect * 0.72, 0.72, 1);
   sprite.position.set(0, 2.2, 0);  // raised above terrain/rocks
   g.add(sprite);
 
   // Gentle bob animation data
   g.userData.phase = Math.random() * Math.PI * 2;
+  g.userData.spriteMat = spriteMat;
   const groundSnap = terrainY(x, z) + 1.2;
   const dropY = (y && y > groundSnap + 2) ? y : groundSnap;  // keep air drops in the air
   g.userData.baseY = dropY;
@@ -2693,6 +2695,10 @@ function animate() {
       traces.splice(i, 1);
     } else {
       traces[i].group.position.y = traces[i].group.userData.baseY + Math.sin(time * 0.8 + traces[i].group.userData.phase) * 0.06;
+    if (traces[i].group.userData.spriteMat && player.mesh) {
+      const td = player.mesh.position.distanceTo(traces[i].group.position);
+      traces[i].group.userData.spriteMat.opacity = clamp((td - 4) / 10, 0, 1);
+    }
     }
   }
 
