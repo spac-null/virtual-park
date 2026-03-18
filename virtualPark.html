@@ -2206,6 +2206,7 @@ function animate() {
   const yawRate   = 2.0;
   const rollRate  = 3.0;
 
+  if (!player.landed) {
   // pitch
   if (keys['KeyW'] || keys['ArrowUp'] || joyY < -0.2)
     player.pitchAngle -= pitchRate * dt * (joyY < -0.2 ? Math.abs(joyY) : 1);
@@ -2221,6 +2222,7 @@ function animate() {
     player.bankAngle += rollRate * dt * (joyX > 0.2 ? joyX : 1);
     if (joyX > 0.2) player.mesh.rotation.y -= joyX * 1.8 * dt;
   }
+  } // end !landed input block
 
   player.pitchAngle = clamp(player.pitchAngle, -1.0, 1.0);  // steeper dives
   player.bankAngle = lerp(player.bankAngle, 0, 3.5 * dt);   // quicker self-level
@@ -2295,16 +2297,15 @@ function animate() {
   // terrain collision — always clamp, strong damping on contact
   const groundY = terrainY(player.mesh.position.x, player.mesh.position.z);
   const floorY = groundY + 0.7;
-  if (player.mesh.position.y <= floorY) {
+  if (player.mesh.position.y <= floorY + 0.05) {
     player.mesh.position.y = floorY;
-    player.vel.x *= 0.05;
-    player.vel.z *= 0.05;
-    player.vel.y = 0;
-    player.speed *= 0.05;          // kill speed → kills lift next frame
-    player.pitchAngle = lerp(player.pitchAngle, 0, 12 * dt);
-    player.bankAngle  = lerp(player.bankAngle,  0, 12 * dt);
+    player.vel.x = 0; player.vel.z = 0; player.vel.y = 0;
+    player.speed = 0;
+    player.pitchAngle = 0;
+    player.bankAngle  = 0;
     player.landed = true;
-  } else {
+  } else if (player.mesh.position.y > floorY + 0.5) {
+    // only leave landed state when clearly off the ground
     player.landed = false;
   }
 
