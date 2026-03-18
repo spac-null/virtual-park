@@ -144,10 +144,11 @@ const CFG = {
   fogColor: 0x87ceeb,
   fogDensity: 0.007,
   gemTypes: [
-    { name: 'common', color: 0x00ffff, points: 1, count: 8, freq: 880 },
-    { name: 'rare',   color: 0xff00ff, points: 3, count: 3, freq: 1108 },
-    { name: 'epic',   color: 0xffd700, points: 5, count: 1, freq: 1480 }
+    { name: 'common', color: 0x00ffff, points: 1, count: 8, freq: 880,  respawn: 400  },
+    { name: 'rare',   color: 0xff00ff, points: 3, count: 3, freq: 1108, respawn: 1200 },
+    { name: 'epic',   color: 0xffd700, points: 5, count: 1, freq: 1480, respawn: 2500 }
   ],
+  winScore: 30,
   npcCount: 8,
   rockCount: 20,
   driftCount: 30,
@@ -564,8 +565,10 @@ function initGems() {
 
 // particles
 const particles = [];
+const MAX_PARTICLES = 60;
 function burstParticles(pos, color) {
-  for (let i = 0; i < 12; i++) {
+  if (particles.length >= MAX_PARTICLES) return; // cap — don't spawn if already busy
+  for (let i = 0; i < 10; i++) {
     const m = new THREE.Mesh(
       new THREE.OctahedronGeometry(0.2),
       new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 })
@@ -717,13 +720,28 @@ function updateNPCs(dt) {
     b.vel.y += cohY * 0.003 + sepY * 0.08;
     b.vel.z += cohZ * 0.003 + sepZ * 0.08 + aliZ * 0.01;
 
-    // scatter from player
+    // scatter from player (stronger)
     _boidVec.copy(b.pos).sub(pp);
-    if (_boidVec.length() < 8) b.vel.addScaledVector(_boidVec.normalize(), 3 * dt);
+    const pDist = _boidVec.length();
+    if (pDist < 10) b.vel.addScaledVector(_boidVec.normalize(), (5 / Math.max(pDist, 1)) * dt * 8);
+
+    // chase nearest active gem occasionally (every 3rd NPC, adds competition)
+    if (i % 3 === 0) {
+      let bestGem = null, bestD2 = 900;
+      for (let gi = 0; gi < gems.length; gi++) {
+        if (!gems[gi].active) continue;
+        const d2 = b.pos.distanceToSquared(gems[gi].mesh.position);
+        if (d2 < bestD2) { bestD2 = d2; bestGem = gems[gi]; }
+      }
+      if (bestGem) {
+        _boidVec.copy(bestGem.mesh.position).sub(b.pos).normalize();
+        b.vel.addScaledVector(_boidVec, 1.5 * dt);
+      }
+    }
 
     // orbit center
     _boidVec.copy(b.pos).negate().normalize();
-    b.vel.addScaledVector(_boidVec, 0.1 * dt);
+    b.vel.addScaledVector(_boidVec, 0.15 * dt);
 
     // altitude bounds
     if (b.pos.y < 15) b.vel.y += 2 * dt;
@@ -917,6 +935,21 @@ function showZoneFlash(text, color) {
   zoneFlashTimer = 1.8;
 }
 
+let roundInProgress = true;
+function triggerWin(winnerName) {
+  if (!roundInProgress) return;
+  roundInProgress = false;
+  const isMe = winnerName === playerName;
+  showZoneFlash(isMe ? '🏆 YOU WIN!' : winnerName + ' WINS!', isMe ? '#22cc44' : '#ff8800');
+  // Reset after 5s
+  setTimeout(() => {
+    player.score = 0;
+    player.gems = 0;
+    for (const id in remotePlayers) remotePlayers[id].score = 0;
+    roundInProgress = true;
+  }, 5000);
+}
+
 function updateOnlineHUD() {
   onlineDot.className = 'dot ' + (wsConnected ? 'on' : 'off');
   const count = Object.keys(remotePlayers).length + 1;
@@ -1072,16 +1105,18 @@ initGems();
 connectWS();
 
 // ── GAME LOOP ───────────────────────────────────────────
+let _frameCount = 0;
 function animate() {
   requestAnimationFrame(animate);
+  _frameCount++;
   let dt = clock.getDelta();
   dt = Math.min(dt, 0.05);
   const time = clock.elapsedTime;
 
   // ── FLIGHT PHYSICS ──────────────────────────────────
-  const pitchRate = 1.8;
-  const yawRate = 1.6;
-  const rollRate = 2.2;
+  const pitchRate = 2.6;
+  const yawRate   = 2.0;
+  const rollRate  = 3.0;
 
   // pitch
   if (keys['KeyW'] || keys['ArrowUp'] || joyY < -0.2)
@@ -1095,14 +1130,14 @@ function animate() {
   if (keys['KeyD'] || keys['ArrowRight'] || joyX > 0.2)
     player.bankAngle += rollRate * dt * (joyX > 0.2 ? joyX : 1);
 
-  player.pitchAngle = clamp(player.pitchAngle, -0.75, 0.75);
-  player.bankAngle = lerp(player.bankAngle, 0, 2.5 * dt); // self-leveling
+  player.pitchAngle = clamp(player.pitchAngle, -1.0, 1.0);  // steeper dives
+  player.bankAngle = lerp(player.bankAngle, 0, 3.5 * dt);   // quicker self-level
 
   // flap
   if ((keys['Space'] || mobileFlap) && player.flapTimer <= 0) {
-    player.vel.y += 5.5;
-    player.speed = Math.max(player.speed, 8);
-    player.flapTimer = 0.35;
+    player.vel.y += 8.0;                          // stronger flap punch
+    player.speed = Math.max(player.speed, 10);
+    player.flapTimer = 0.25;                       // faster repeat flapping
     player.isFlapping = true;
     player.flapAnim = 0.25;
     playFlap();
@@ -1124,7 +1159,7 @@ function animate() {
   // speed: dive accelerates, climb decelerates
   player.speed += player.facing.y * -2.5 * dt;
   player.speed -= 1.0 * dt; // air resistance
-  player.speed = clamp(player.speed, 1.5, 28);
+  player.speed = clamp(player.speed, 0.5, 32);
 
   // gravity
   player.vel.y -= 6.0 * dt;
@@ -1296,8 +1331,12 @@ function animate() {
         }
       }
 
-      // respawn after delay
+      // check win condition
+      if (player.score >= CFG.winScore) triggerWin(player.name);
+
+      // respawn — faster for common, slower for epic
       const gemRef = g;
+      const respawnMs = CFG.gemTypes[g.type].respawn;
       setTimeout(() => {
         let pos;
         do { pos = new THREE.Vector3(rand(-65, 65), rand(10, 50), rand(-65, 65)); }
@@ -1308,7 +1347,7 @@ function animate() {
         gemRef.active = true;
         gemRef.mesh.visible = true;
         gemRef.light.visible = true;
-      }, 2000);
+      }, respawnMs);
     }
   }
 
@@ -1331,8 +1370,8 @@ function animate() {
   // ── PARTICLES ───────────────────────────────────────
   updateParticles(dt);
 
-  // ── NPC BIRDS ───────────────────────────────────────
-  updateNPCs(dt);
+  // ── NPC BIRDS (every 2 frames — 8×boids is cheap but no need at 60fps) ──
+  if (_frameCount % 2 === 0) updateNPCs(dt * 2);
 
   // ── REMOTE PLAYERS ──────────────────────────────────
   updateRemotePlayers(dt);
