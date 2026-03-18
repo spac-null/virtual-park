@@ -186,8 +186,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.enabled = false;
 document.body.prepend(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -363,15 +362,13 @@ const cloudMesh = new THREE.Mesh(
 cloudMesh.receiveShadow = true;
 scene.add(cloudMesh);
 
-// Warm sun shafts at rock landmark positions
+// Warm sun shafts — 1 light per pillar (was 4, 32 total was expensive)
 for (let i = 0; i < CFG.pillarCount; i++) {
   const p = new THREE.Vector3(rand(-60, 60), 0, rand(-60, 60));
   if (p.length() < 15) p.normalize().multiplyScalar(20);
-  for (let j = 0; j < 4; j++) {
-    const pl = new THREE.PointLight(0xfff0aa, 1.2, 20);
-    pl.position.set(p.x, 12 + j * 10, p.z);
-    scene.add(pl);
-  }
+  const pl = new THREE.PointLight(0xfff0aa, 2.5, 35);
+  pl.position.set(p.x, 20, p.z);
+  scene.add(pl);
 }
 
 // ── GROUND ──────────────────────────────────────────────
@@ -638,20 +635,33 @@ function initGems() {
   });
 }
 
-// particles
+// particles — pooled (shared geo, no alloc per burst)
 const particles = [];
 const MAX_PARTICLES = 60;
+const _particleGeo = new THREE.OctahedronGeometry(0.2);
+const _particleVel = new THREE.Vector3();
+
+// Pre-allocate pool
+const _particlePool = [];
+for (let _pi = 0; _pi < MAX_PARTICLES; _pi++) {
+  const m = new THREE.Mesh(_particleGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 }));
+  m.visible = false;
+  scene.add(m);
+  _particlePool.push(m);
+}
+
 function burstParticles(pos, color) {
-  if (particles.length >= MAX_PARTICLES) return; // cap — don't spawn if already busy
-  for (let i = 0; i < 10; i++) {
-    const m = new THREE.Mesh(
-      new THREE.OctahedronGeometry(0.2),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 })
-    );
+  if (particles.length >= MAX_PARTICLES) return;
+  const avail = MAX_PARTICLES - particles.length;
+  const count = Math.min(10, avail);
+  for (let i = 0; i < count; i++) {
+    const m = _particlePool[particles.length + i];
+    m.material.color.set(color);
+    m.material.opacity = 1;
+    m.visible = true;
     m.position.copy(pos);
-    const v = new THREE.Vector3(rand(-1, 1), rand(-1, 1), rand(-1, 1)).normalize().multiplyScalar(rand(3, 7));
-    scene.add(m);
-    particles.push({ mesh: m, vel: v, life: 0.5 });
+    _particleVel.set(rand(-1,1), rand(-1,1), rand(-1,1)).normalize().multiplyScalar(rand(3,7));
+    particles.push({ mesh: m, vel: _particleVel.clone(), life: 0.5 });
   }
 }
 
@@ -660,12 +670,12 @@ function updateParticles(dt) {
     const p = particles[i];
     p.mesh.position.addScaledVector(p.vel, dt);
     p.life -= dt;
-    p.mesh.material.opacity = Math.max(0, p.life / 0.5);
     if (p.life <= 0) {
-      scene.remove(p.mesh);
-      p.mesh.geometry.dispose();
-      p.mesh.material.dispose();
+      p.mesh.visible = false;
+      p.mesh.material.opacity = 0;
       particles.splice(i, 1);
+    } else {
+      p.mesh.material.opacity = p.life / 0.5;
     }
   }
 }
@@ -691,13 +701,15 @@ function initAudio() {
   d1.connect(lp); d2.connect(lp); lp.connect(droneGain); droneGain.connect(masterGain);
   d1.start(); d2.start();
 
-  // wind noise
-  const bufSize = 4096;
-  const noiseNode = audioCtx.createScriptProcessor(bufSize, 1, 1);
-  noiseNode.onaudioprocess = e => {
-    const o = e.outputBuffer.getChannelData(0);
-    for (let i = 0; i < bufSize; i++) o[i] = Math.random() * 2 - 1;
-  };
+  // wind noise — static looped buffer (no main-thread cost unlike ScriptProcessor)
+  const noiseSamples = audioCtx.sampleRate * 2;
+  const noiseBuf = audioCtx.createBuffer(1, noiseSamples, audioCtx.sampleRate);
+  const noiseData = noiseBuf.getChannelData(0);
+  for (let i = 0; i < noiseSamples; i++) noiseData[i] = Math.random() * 2 - 1;
+  const noiseNode = audioCtx.createBufferSource();
+  noiseNode.buffer = noiseBuf;
+  noiseNode.loop = true;
+  noiseNode.start();
   const windFilter = audioCtx.createBiquadFilter();
   windFilter.type = 'highpass';
   windFilter.frequency.value = 800;
@@ -1084,6 +1096,19 @@ const onlineName = document.querySelector('#hud-online .name');
 const sbBody = document.getElementById('sb-body');
 
 let zoneFlashTimer = 0;
+
+function _drawRadarNestDot(dx, dz, ry, color) {
+  const rx2 = dx*Math.cos(ry) - dz*Math.sin(ry);
+  const rz2 = dx*Math.sin(ry) + dz*Math.cos(ry);
+  const p2d = Math.sqrt(rx2*rx2 + rz2*rz2);
+  const sc = p2d > 28 ? 28/p2d : 1;
+  const sx2 = 41 + rx2*sc/30*38, sy2 = 41 + rz2*sc/30*38;
+  radarCtx.fillStyle = color;
+  radarCtx.strokeStyle = 'rgba(255,255,255,0.5)';
+  radarCtx.lineWidth = 1.5;
+  radarCtx.beginPath(); radarCtx.arc(sx2, sy2, 3.5, 0, Math.PI*2);
+  radarCtx.fill(); radarCtx.stroke();
+}
 function showZoneFlash(text, color) {
   zoneFlash.textContent = text;
   zoneFlash.style.color = color;
@@ -1110,13 +1135,15 @@ function triggerWin(winnerName) {
   }, 5000);
 }
 
+let _onlineHudCount = -1, _onlineHudConnected = null;
 function updateOnlineHUD() {
-  onlineDot.className = 'dot ' + (wsConnected ? 'on' : 'off');
   const count = Object.keys(remotePlayers).length + 1;
+  if (count === _onlineHudCount && wsConnected === _onlineHudConnected) return;
+  _onlineHudCount = count; _onlineHudConnected = wsConnected;
+  onlineDot.className = 'dot ' + (wsConnected ? 'on' : 'off');
   onlineStatus.textContent = wsConnected ? count + ' online' : 'offline';
   onlineName.textContent = playerName;
-  let sq = '';
-  sq += '<span class="psq" style="background:#' + player.color.toString(16).padStart(6, '0') + '"></span>';
+  let sq = '<span class="psq" style="background:#' + player.color.toString(16).padStart(6, '0') + '"></span>';
   for (const id in remotePlayers) {
     const c = remotePlayers[id].color || 0x888888;
     sq += '<span class="psq" style="background:#' + c.toString(16).padStart(6, '0') + '"></span>';
@@ -1192,40 +1219,31 @@ function updateHUD(dt) {
     radarCtx.fillRect(sx - 1.5, sy - 1.5, 3, 3);
   }
 
-  // nest dots — own + remote, always shown (clamped to radar edge)
-  function radarNestDot(dx, dz, color) {
-    const rx2 = dx*Math.cos(ry) - dz*Math.sin(ry);
-    const rz2 = dx*Math.sin(ry) + dz*Math.cos(ry);
-    const p2d = Math.sqrt(rx2*rx2 + rz2*rz2);
-    const sc = p2d > 28 ? 28/p2d : 1;
-    const sx2 = 41 + rx2*sc/30*38, sy2 = 41 + rz2*sc/30*38;
-    radarCtx.fillStyle = color;
-    radarCtx.strokeStyle = 'rgba(255,255,255,0.5)';
-    radarCtx.lineWidth = 1.5;
-    radarCtx.beginPath(); radarCtx.arc(sx2, sy2, 3.5, 0, Math.PI*2);
-    radarCtx.fill(); radarCtx.stroke();
-  }
-  radarNestDot(playerNestPos.x - pp.x, playerNestPos.z - pp.z, '#' + player.color.toString(16).padStart(6,'0'));
+  // nest dots — own + remote
+  _drawRadarNestDot(playerNestPos.x - pp.x, playerNestPos.z - pp.z, ry, '#' + player.color.toString(16).padStart(6,'0'));
   for (const id in remoteNests) {
     const rn = remoteNests[id];
     const c = remotePlayers[id] ? remotePlayers[id].color : 0x888888;
-    radarNestDot(rn.pos.x - pp.x, rn.pos.z - pp.z, '#' + c.toString(16).padStart(6,'0'));
+    _drawRadarNestDot(rn.pos.x - pp.x, rn.pos.z - pp.z, ry, '#' + c.toString(16).padStart(6,'0'));
   }
 
   // center dot
   radarCtx.fillStyle = '#0055cc';
   radarCtx.fillRect(39.5, 39.5, 3, 3);
 
-  // scoreboard
-  let sbHTML = '';
-  allPlayers.forEach((p, i) => {
-    sbHTML += '<tr class="' + (p.me ? 'you' : '') + '"><td>' + (i + 1) + '</td><td>' + p.name + '</td><td>' + p.score + '</td></tr>';
-  });
-  sbBody.innerHTML = sbHTML;
+  // scoreboard — only rebuild when visible
+  if (document.getElementById('scoreboard').classList.contains('visible')) {
+    let sbHTML = '';
+    allPlayers.forEach((p, i) => {
+      sbHTML += '<tr class="' + (p.me ? 'you' : '') + '"><td>' + (i + 1) + '</td><td>' + p.name + '</td><td>' + p.score + '</td></tr>';
+    });
+    sbBody.innerHTML = sbHTML;
+  }
 }
 
+const _projVec = new THREE.Vector3();
 function updateRemotePlayers(dt) {
-  const projVec = new THREE.Vector3();
+  const projVec = _projVec;
   for (const id in remotePlayers) {
     const rp = remotePlayers[id];
     rp.mesh.position.lerp(rp.targetPos, 6 * dt);
@@ -1333,19 +1351,28 @@ nestHudEl.style.cssText = 'position:absolute;bottom:110px;left:14px;z-index:10;p
 nestHudEl.innerHTML = 'nest: <b>0</b> / ' + NEST_WIN + '<br>carrying: <b>0</b>';
 document.body.appendChild(nestHudEl);
 
+let _nestHudBanked = -1, _nestHudCarried = -1, _nestHudArrowIdx = -1, _nestHudDist = -1;
+const _nestArrows = ['↑','↗','→','↘','↓','↙','←','↖'];
+
 function updateNestHUD() {
-  let html = 'nest: <b>' + nestState.banked + '</b> / ' + NEST_WIN + '<br>carrying: <b>' + nestState.carried + '</b>';
+  let arrowIdx = -1, dist = 0;
   if (nestState.carried > 0 && player.mesh) {
     const ry = player.mesh.rotation.y;
     const dx = playerNestPos.x - player.mesh.position.x;
     const dz = playerNestPos.z - player.mesh.position.z;
-    const dist = Math.round(Math.sqrt(dx*dx + dz*dz));
+    dist = Math.round(Math.sqrt(dx*dx + dz*dz));
     const fwd_x = -Math.sin(ry), fwd_z = -Math.cos(ry);
     const rgt_x =  Math.cos(ry), rgt_z = -Math.sin(ry);
     const rel = Math.atan2(dx*rgt_x + dz*rgt_z, dx*fwd_x + dz*fwd_z);
-    const arrows = ['↑','↗','→','↘','↓','↙','←','↖'];
-    const idx = Math.round(((rel + Math.PI*2) % (Math.PI*2)) / (Math.PI*2) * 8) % 8;
-    html += '<br><span style="color:#ff8800;font-size:15px">' + arrows[idx] + '</span> <span style="color:#cc6600">' + dist + 'm</span>';
+    arrowIdx = Math.round(((rel + Math.PI*2) % (Math.PI*2)) / (Math.PI*2) * 8) % 8;
+  }
+  if (nestState.banked === _nestHudBanked && nestState.carried === _nestHudCarried &&
+      arrowIdx === _nestHudArrowIdx && dist === _nestHudDist) return;
+  _nestHudBanked = nestState.banked; _nestHudCarried = nestState.carried;
+  _nestHudArrowIdx = arrowIdx; _nestHudDist = dist;
+  let html = 'nest: <b>' + nestState.banked + '</b> / ' + NEST_WIN + '<br>carrying: <b>' + nestState.carried + '</b>';
+  if (arrowIdx >= 0) {
+    html += '<br><span style="color:#ff8800;font-size:15px">' + _nestArrows[arrowIdx] + '</span> <span style="color:#cc6600">' + dist + 'm</span>';
   }
   nestHudEl.innerHTML = html;
 }
