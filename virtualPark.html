@@ -122,10 +122,11 @@ canvas{display:block;cursor:none}
 
 <div id="controls-overlay" class="panel">
   <table>
-    <tr><td>W / S</td><td>pitch up / down</td></tr>
-    <tr><td>A / D</td><td>bank &amp; turn</td></tr>
-    <tr><td>SPACE</td><td>flap (bird) / dash (duck)</td></tr>
-    <tr><td>E</td><td>egg bomb (bird) / trace (duck)</td></tr>
+    <tr><td>W / S</td><td>pitch (bird) / fwd-back (crab)</td></tr>
+    <tr><td>A / D</td><td>bank &amp; turn (bird) / strafe (crab)</td></tr>
+    <tr><td>Q / E</td><td>turn crab left / right</td></tr>
+    <tr><td>SPACE</td><td>flap (bird) / dash (crab)</td></tr>
+    <tr><td>E</td><td>egg bomb (bird) / trace (crab)</td></tr>
     <tr><td>R-drag</td><td>free look</td></tr>
     <tr><td>TAB</td><td>scoreboard</td></tr>
     <tr><td>R</td><td>respawn (if stuck)</td></tr>
@@ -149,9 +150,9 @@ canvas{display:block;cursor:none}
       <div class="cs-desc">FLY · COLLECT GEMS · DROP EGG BOMBS</div>
     </button>
     <button class="cs-btn" id="btn-duck">
-      <div class="cs-icon">(^_^)</div>
-      <div class="cs-name">DUCK</div>
-      <div class="cs-desc">WALK · BAZOOKA SHOTS · DASH ATTACK</div>
+      <div class="cs-icon">\(o_o)/</div>
+      <div class="cs-name">CRAB</div>
+      <div class="cs-desc">WALK SIDEWAYS · BAZOOKA · DASH</div>
     </button>
   </div>
 </div>
@@ -542,73 +543,82 @@ function createBirdMesh(color) {
   return group;
 }
 
-// ── DUCK MESH ────────────────────────────────────────────
-function createDuckMesh(color) {
+// ── CRAB MESH ────────────────────────────────────────────
+function createCrabMesh(color) {
   const g = new THREE.Group();
-  const c = new THREE.Color(color);
-  const bodyMat = new THREE.MeshStandardMaterial({ color: c, roughness: 0.8 });
-  const whiteMat = new THREE.MeshStandardMaterial({ color: 0xfffde0 });
-  const billMat  = new THREE.MeshStandardMaterial({ color: 0xff8c00 });
-  const gunMat   = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.6 });
+  const bodyMat  = new THREE.MeshLambertMaterial({ color: 0xff4400, flatShading: true });
+  const clawMat  = new THREE.MeshLambertMaterial({ color: 0xdd3300, flatShading: true });
+  const legMat   = new THREE.MeshLambertMaterial({ color: 0xcc3300, flatShading: true });
+  const eyeMat   = new THREE.MeshLambertMaterial({ color: 0xffaa00, flatShading: true });
+  const gunMat   = new THREE.MeshLambertMaterial({ color: 0x222222, flatShading: true });
 
-  // body
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.78, 12, 8), bodyMat);
-  body.scale.set(1, 0.72, 1.1); g.add(body);
-  g.userData.body = body; g.userData.bodyMat = bodyMat;
+  // body — wide flat carapace
+  const body = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.5, 1.4), bodyMat);
+  body.castShadow = true;
+  g.add(body);
+  g.userData.body = body;
 
-  // belly
-  const belly = new THREE.Mesh(new THREE.SphereGeometry(0.52, 8, 6), whiteMat);
-  belly.position.set(0, -0.1, 0.28); belly.scale.set(0.9, 0.65, 0.75); g.add(belly);
-
-  // head
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.42, 10, 7), bodyMat);
-  head.position.set(0, 0.56, 0.42); g.add(head);
-  g.userData.duckHead = head;
-
-  // upper bill
-  const bill = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.11, 0.40), billMat);
-  bill.position.set(0, 0.48, 0.87); bill.rotation.x = 0.12; g.add(bill);
-  // lower bill
-  const billL = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.09, 0.36), billMat);
-  billL.position.set(0, 0.40, 0.86); billL.rotation.x = 0.18; g.add(billL);
-
-  // eyes + glints
-  [-0.19, 0.19].forEach(ex => {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.078, 6, 5),
-      new THREE.MeshBasicMaterial({ color: 0x111111 }));
-    eye.position.set(ex, 0.66, 0.73); g.add(eye);
-    const gl = new THREE.Mesh(new THREE.SphereGeometry(0.03, 4, 3),
-      new THREE.MeshBasicMaterial({ color: 0xffffff }));
-    gl.position.set(ex + Math.sign(ex)*0.03, 0.68, 0.75); g.add(gl);
-  });
-
-  // tail
-  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.55, 6), bodyMat);
-  tail.position.set(0, 0.30, -0.80); tail.rotation.x = -0.78; g.add(tail);
-  const tailCurl = new THREE.Mesh(new THREE.SphereGeometry(0.14, 5, 4), bodyMat);
-  tailCurl.position.set(0, 0.56, -0.84); g.add(tailCurl);
-
-  // wings
+  // big claws — left and right, angled slightly outward
   [-1, 1].forEach(side => {
-    const wing = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.1, 0.62), bodyMat);
-    wing.position.set(side * 0.84, -0.05, 0.05);
-    wing.rotation.z = side * -0.18; g.add(wing);
-    if (side === -1) g.userData.duckLeftWing = wing;
-    else g.userData.duckRightWing = wing;
+    const clawGroup = new THREE.Group();
+    // upper claw arm
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.28, 0.32), clawMat);
+    arm.position.set(side * 0.3, 0, 0);
+    clawGroup.add(arm);
+    // claw pincer top
+    const pinTop = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.14, 0.28), clawMat);
+    pinTop.position.set(side * 0.18, 0.12, 0);
+    clawGroup.add(pinTop);
+    // claw pincer bottom
+    const pinBot = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.14, 0.28), clawMat);
+    pinBot.position.set(side * 0.18, -0.12, 0);
+    clawGroup.add(pinBot);
+
+    clawGroup.position.set(side * 1.55, 0.05, 0.2);
+    clawGroup.rotation.y = side * 0.28;
+    g.add(clawGroup);
+    if (side === -1) g.userData.crabLeftClaw = clawGroup;
+    else g.userData.crabRightClaw = clawGroup;
   });
 
-  // feet (orange flat boxes)
-  [-0.22, 0.22].forEach((fx, fi) => {
-    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.06, 0.30), billMat);
-    foot.position.set(fx, -0.58, 0.1);
-    foot.rotation.y = fi === 0 ? 0.22 : -0.22; g.add(foot);
+  // eye stalks (top of body, two small cylinders with sphere tips)
+  [-0.42, 0.42].forEach(ex => {
+    const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.07, 0.38, 5), eyeMat);
+    stalk.position.set(ex, 0.38, 0.38);
+    g.add(stalk);
+    const eyeBall = new THREE.Mesh(new THREE.SphereGeometry(0.1, 5, 4), new THREE.MeshBasicMaterial({ color: 0x111111 }));
+    eyeBall.position.set(ex, 0.58, 0.4);
+    g.add(eyeBall);
+    const eyeGlint = new THREE.Mesh(new THREE.SphereGeometry(0.04, 4, 3), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    eyeGlint.position.set(ex + 0.03, 0.61, 0.46);
+    g.add(eyeGlint);
   });
 
-  // bazooka (right side, horizontal cylinder)
+  // 4 leg pairs — thin flat boxes on sides, angled down
+  for (let li = 0; li < 4; li++) {
+    const lz = -0.44 + li * 0.28;
+    [-1, 1].forEach(side => {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.1, 0.12), legMat);
+      leg.position.set(side * 1.3, -0.26, lz);
+      leg.rotation.z = side * 0.45;
+      g.add(leg);
+      // lower leg segment
+      const lleg = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.08, 0.1), legMat);
+      lleg.position.set(side * 1.7, -0.48, lz);
+      lleg.rotation.z = side * 0.7;
+      g.add(lleg);
+    });
+  }
+
+  // bazooka attached to right claw
   const bazBarrel = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 1.05, 8), gunMat);
-  bazBarrel.rotation.z = Math.PI / 2; bazBarrel.position.set(0.92, 0.08, 0.18); g.add(bazBarrel);
+  bazBarrel.rotation.z = Math.PI / 2;
+  bazBarrel.position.set(2.05, 0.08, 0.18);
+  g.add(bazBarrel);
   const bazMuzzle = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.09, 0.2, 8), gunMat);
-  bazMuzzle.rotation.z = Math.PI / 2; bazMuzzle.position.set(1.45, 0.08, 0.18); g.add(bazMuzzle);
+  bazMuzzle.rotation.z = Math.PI / 2;
+  bazMuzzle.position.set(2.6, 0.08, 0.18);
+  g.add(bazMuzzle);
 
   return g;
 }
@@ -900,7 +910,7 @@ function duckDash() {
   // clamp inside world
   const dl = player.mesh.position.length();
   if (dl > 82) player.mesh.position.multiplyScalar(82 / dl);
-  player.mesh.position.y = terrainY(player.mesh.position.x, player.mesh.position.z) + 0.88;
+  player.mesh.position.y = terrainY(player.mesh.position.x, player.mesh.position.z) + 0.5;
   // dust burst
   burstParticles(player.mesh.position.clone(), 0xddcc88);
   showZoneFlash('DASH!', '#ffcc00');
@@ -1322,7 +1332,7 @@ function connectWS() {
     } else if (msg.type === 'leave') {
       removeRemotePlayer(msg.id);
     } else if (msg.type === 'trace') {
-      addTrace(msg.x || 0, msg.z || 0, msg.y || CFG.spawnY, msg.text || '');
+      addTrace(msg.x || 0, msg.z || 0, msg.y || CFG.spawnY, msg.text || '', msg.color || null);
     }
   };
 }
@@ -1355,24 +1365,60 @@ function sendMove() {
 // ── TRACES ──────────────────────────────────────────────
 const traces = [];
 
-function addTrace(x, z, y, text) {
+function addTrace(x, z, y, text, color) {
   const g = new THREE.Group();
+
+  // Glowing orb (color of the sender)
+  const c = color ? parseInt(color.replace('#',''), 16) : 0x00b3ff;
   const sphere = new THREE.Mesh(
-    new THREE.SphereGeometry(0.3, 6, 4),
-    new THREE.MeshBasicMaterial({ color: 0x00b3ff, transparent: true, opacity: 0.7 })
+    new THREE.SphereGeometry(0.25, 6, 4),
+    new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.9 })
   );
   g.add(sphere);
-  g.add(new THREE.PointLight(0x00b3ff, 1, 6));
+
+  // Canvas text sprite — floating label above the orb
+  const canvas = document.createElement('canvas');
+  canvas.width = 512; canvas.height = 80;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+  ctx.roundRect(4, 4, canvas.width - 8, canvas.height - 8, 10);
+  ctx.fill();
+  ctx.font = 'bold 22px monospace';
+  ctx.fillStyle = color || '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  // word-wrap at 28 chars
+  const words = text.split(' ');
+  let line = '', lines = [];
+  for (const w of words) {
+    if ((line + w).length > 28) { lines.push(line.trim()); line = ''; }
+    line += w + ' ';
+  }
+  if (line.trim()) lines.push(line.trim());
+  const lineH = 26;
+  const startY = canvas.height/2 - ((lines.length-1) * lineH) / 2;
+  lines.forEach((l, i) => ctx.fillText(l, canvas.width/2, startY + i * lineH));
+
+  const tex = new THREE.CanvasTexture(canvas);
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true }));
+  sprite.scale.set(4, 0.65, 1);
+  sprite.position.set(0, 1.2, 0);  // above the orb
+  g.add(sprite);
+
+  // Gentle bob animation data
+  g.userData.phase = Math.random() * Math.PI * 2;
+  g.userData.baseY = y || CFG.spawnY;
   g.position.set(x, y || CFG.spawnY, z);
   scene.add(g);
-  traces.push({ group: g, life: 60, text });
+  traces.push({ group: g, life: 120, text });  // 2 min lifetime
 }
 
 function sendTrace(text) {
   if (!ws || ws.readyState !== 1) return;
   const p = player.mesh.position;
-  ws.send(JSON.stringify({ type: 'trace', x: +p.x.toFixed(2), z: +p.z.toFixed(2), y: +p.y.toFixed(2), text }));
-  addTrace(p.x, p.z, p.y, text);
+  const colorHex = '#' + player.color.toString(16).padStart(6, '0');
+  ws.send(JSON.stringify({ type: 'trace', x: +p.x.toFixed(2), z: +p.z.toFixed(2), y: +p.y.toFixed(2), text, color: colorHex }));
+  addTrace(p.x, p.z, p.y, text, colorHex);
 }
 
 let tracePrompt = false;
@@ -1633,10 +1679,10 @@ function startGame(role) {
   playerRole = role;
   document.getElementById('char-select').style.display = 'none';
   if (role === 'duck') {
-    // replace player mesh with duck
+    // replace player mesh with crab
     scene.remove(player.mesh);
-    player.mesh = createDuckMesh(player.color);
-    player.mesh.position.set(0, terrainY(0, 0) + 0.9, 0);
+    player.mesh = createCrabMesh(player.color);
+    player.mesh.position.set(0, terrainY(0, 0) + 0.5, 0);
     scene.add(player.mesh);
     duckYaw = 0;
   }
@@ -1734,36 +1780,49 @@ function animate() {
 
   // ── FLIGHT PHYSICS (bird) / GROUND MOVEMENT (duck) ──
   if (playerRole === 'duck') {
-    // duck ground movement
-    if (keys['KeyA'] || keys['ArrowLeft'])  duckYaw += 2.5 * dt;
-    if (keys['KeyD'] || keys['ArrowRight']) duckYaw -= 2.5 * dt;
+    // crab ground movement — Q/E or mouse drag to turn, A/D strafe sideways (natural crab direction)
+    if (keys['KeyQ'] || keys['ArrowLeft'])  duckYaw += 2.5 * dt;
+    if (keys['KeyE'] || keys['ArrowRight']) duckYaw -= 2.5 * dt;
     const duckSpd = 9;
+    const duckFwdSpd = duckSpd * 0.6;
+    let strafeDir = 0;
     let duckMoving = false;
+    // A/D → strafe left/right (primary crab movement)
+    if (keys['KeyA']) {
+      // strafe left — move along local -X axis
+      player.mesh.position.x -= Math.cos(duckYaw) * duckSpd * dt;
+      player.mesh.position.z += Math.sin(duckYaw) * duckSpd * dt;
+      duckMoving = true; strafeDir = -1;
+    }
+    if (keys['KeyD']) {
+      // strafe right — move along local +X axis
+      player.mesh.position.x += Math.cos(duckYaw) * duckSpd * dt;
+      player.mesh.position.z -= Math.sin(duckYaw) * duckSpd * dt;
+      duckMoving = true; strafeDir = 1;
+    }
+    // W/S → forward/backward (slower, secondary)
     if (keys['KeyW'] || keys['ArrowUp']) {
-      player.mesh.position.x -= Math.sin(duckYaw) * duckSpd * dt;
-      player.mesh.position.z -= Math.cos(duckYaw) * duckSpd * dt;
+      player.mesh.position.x -= Math.sin(duckYaw) * duckFwdSpd * dt;
+      player.mesh.position.z -= Math.cos(duckYaw) * duckFwdSpd * dt;
       duckMoving = true;
     }
     if (keys['KeyS'] || keys['ArrowDown']) {
-      player.mesh.position.x += Math.sin(duckYaw) * duckSpd * dt;
-      player.mesh.position.z += Math.cos(duckYaw) * duckSpd * dt;
+      player.mesh.position.x += Math.sin(duckYaw) * duckFwdSpd * dt;
+      player.mesh.position.z += Math.cos(duckYaw) * duckFwdSpd * dt;
       duckMoving = true;
     }
     const dl = player.mesh.position.length();
     if (dl > 82) player.mesh.position.multiplyScalar(82 / dl);
     const gy = terrainY(player.mesh.position.x, player.mesh.position.z);
-    player.mesh.position.y = gy + 0.88;
+    player.mesh.position.y = gy + 0.5;
     player.mesh.rotation.y = duckYaw;
-    player.mesh.rotation.z = duckMoving ? Math.sin(time * 6) * 0.1 : lerp(player.mesh.rotation.z, 0, 5 * dt);
-    if (player.mesh.userData.duckLeftWing) {
-      const wa = duckMoving ? Math.sin(time * 10) * 0.22 : 0;
-      player.mesh.userData.duckLeftWing.rotation.z = -0.18 + wa;
-      player.mesh.userData.duckRightWing.rotation.z = 0.18 - wa;
-    }
+    // lean slightly in strafe direction — crab shuffle feel
+    const targetLean = strafeDir * 0.22;
+    player.mesh.rotation.z = lerp(player.mesh.rotation.z, duckMoving ? targetLean : 0, 6 * dt);
     bazookaCooldown = Math.max(0, bazookaCooldown - dt);
     eggCooldown = Math.max(0, eggCooldown - dt);
     dashCooldown = Math.max(0, dashCooldown - dt);
-    // duck can still collect gems (radius 4.5 for ground reach)
+    // crab can collect gems (radius 4.5 for ground reach)
     player.speed = 0; player.pitchAngle = 0; player.bankAngle = 0;
   } else {
   // ── BIRD FLIGHT ──────────────────────────────────────
@@ -1912,13 +1971,13 @@ function animate() {
   eggCooldown = Math.max(0, eggCooldown - dt);
   } // end bird-only block
 
-  // ── BIRD/DUCK MESH ORIENTATION ───────────────────────
+  // ── BIRD/CRAB MESH ORIENTATION ───────────────────────
   if (playerRole !== 'duck') {
     player.mesh.rotation.z = -player.bankAngle * 0.7;
     if (player.mesh.userData.body) player.mesh.userData.body.rotation.x = player.pitchAngle;
   }
 
-  // wing animation (bird only — duck wings handled in movement block)
+  // wing animation (bird only — crab handled in movement block)
   if (playerRole !== 'duck') {
   if (player.flapAnim > 0) {
     player.flapAnim -= dt;
@@ -2131,6 +2190,8 @@ function animate() {
     if (traces[i].life <= 0) {
       scene.remove(traces[i].group);
       traces.splice(i, 1);
+    } else {
+      traces[i].group.position.y = traces[i].group.userData.baseY + Math.sin(time * 0.8 + traces[i].group.userData.phase) * 0.15;
     }
   }
 
