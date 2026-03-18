@@ -743,6 +743,43 @@ function playArchBonus() {
   o2.connect(g2); g2.connect(masterGain); o2.start(t + 0.08); o2.stop(t + 0.2);
 }
 
+function playBankGems(count) {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  const freqs = [523, 659, 784, 1047];
+  const n = Math.min(Math.max(count, 1), freqs.length);
+  for (let i = 0; i < n; i++) {
+    const o = audioCtx.createOscillator(); o.type = 'sine'; o.frequency.value = freqs[i];
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.2, t + i * 0.08);
+    g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.08 + 0.28);
+    o.connect(g); g.connect(masterGain); o.start(t + i * 0.08); o.stop(t + i * 0.08 + 0.32);
+  }
+}
+
+function playBump() {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  const o = audioCtx.createOscillator(); o.type = 'sine'; o.frequency.value = 80;
+  o.frequency.exponentialRampToValueAtTime(35, t + 0.18);
+  const g = audioCtx.createGain();
+  g.gain.setValueAtTime(0.25, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+  o.connect(g); g.connect(masterGain); o.start(t); o.stop(t + 0.25);
+}
+
+function playWin() {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  [523, 659, 784, 1047, 1319].forEach((f, i) => {
+    const o = audioCtx.createOscillator(); o.type = 'sine'; o.frequency.value = f;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.22, t + i * 0.13);
+    g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.13 + 0.45);
+    o.connect(g); g.connect(masterGain); o.start(t + i * 0.13); o.stop(t + i * 0.13 + 0.5);
+  });
+}
+
 // ── NPC BIRDS (boids) ───────────────────────────────────
 const npcBirds = [];
 const npcColors = [0x8B6914, 0x6B3A2E, 0x4A5568, 0x5C4033, 0x7B6B4F, 0x3D4F5F, 0x6E5B3A, 0x4F6D5B];
@@ -842,6 +879,7 @@ function updateNPCs(dt) {
 // ── MULTIPLAYER ─────────────────────────────────────────
 const remotePlayers = {};
 const remoteLabels = {};
+const remoteNests = {};
 
 function getRemotePlayer(id, name, color) {
   if (remotePlayers[id]) return remotePlayers[id];
@@ -858,12 +896,42 @@ function getRemotePlayer(id, name, color) {
   };
   remotePlayers[id] = rp;
   remoteLabels[id] = label;
+  createRemoteNest(id, name, color);
   return rp;
 }
 
 function removeRemotePlayer(id) {
   if (remotePlayers[id]) { scene.remove(remotePlayers[id].mesh); delete remotePlayers[id]; }
   if (remoteLabels[id]) { remoteLabels[id].remove(); delete remoteLabels[id]; }
+  removeRemoteNest(id);
+}
+
+function getNestPosFromName(name) {
+  const idx = Math.abs(name.split('').reduce((a,c) => a + c.charCodeAt(0), 0)) % nestPositions.length;
+  const np = nestPositions[idx].clone();
+  const tx = np.x, tz = np.z;
+  np.y = Math.sin(tx*0.06)*2.5 + Math.cos(tz*0.05)*2.0 + Math.sin(tx*0.12+tz*0.09)*1.2 + 0.3;
+  return np;
+}
+
+function createRemoteNest(id, name, color) {
+  if (remoteNests[id]) return;
+  const np = getNestPosFromName(name);
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.7, emissive: color, emissiveIntensity: 0.35 });
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.8, 0.25, 6, 24), mat);
+  ring.position.copy(np);
+  scene.add(ring);
+  const light = new THREE.PointLight(color, 2, 8);
+  light.position.copy(np); light.position.y += 0.5;
+  scene.add(light);
+  remoteNests[id] = { ring, light, mat, pos: np };
+}
+
+function removeRemoteNest(id) {
+  if (!remoteNests[id]) return;
+  scene.remove(remoteNests[id].ring);
+  scene.remove(remoteNests[id].light);
+  delete remoteNests[id];
 }
 
 function parseColor(c) {
@@ -1029,6 +1097,7 @@ function triggerWin(winnerName) {
   roundInProgress = false;
   const isMe = winnerName === playerName;
   showZoneFlash(isMe ? '🏆 YOU WIN!' : winnerName + ' WINS!', isMe ? '#22cc44' : '#ff8800');
+  if (isMe) playWin();
   // Reset after 5s
   setTimeout(() => {
     player.score = 0;
@@ -1121,6 +1190,26 @@ function updateHUD(dt) {
     const sx = 41 + rx / 30 * 38, sy = 41 + rz / 30 * 38;
     radarCtx.fillStyle = '#1a1a2e';
     radarCtx.fillRect(sx - 1.5, sy - 1.5, 3, 3);
+  }
+
+  // nest dots — own + remote, always shown (clamped to radar edge)
+  function radarNestDot(dx, dz, color) {
+    const rx2 = dx*Math.cos(ry) - dz*Math.sin(ry);
+    const rz2 = dx*Math.sin(ry) + dz*Math.cos(ry);
+    const p2d = Math.sqrt(rx2*rx2 + rz2*rz2);
+    const sc = p2d > 28 ? 28/p2d : 1;
+    const sx2 = 41 + rx2*sc/30*38, sy2 = 41 + rz2*sc/30*38;
+    radarCtx.fillStyle = color;
+    radarCtx.strokeStyle = 'rgba(255,255,255,0.5)';
+    radarCtx.lineWidth = 1.5;
+    radarCtx.beginPath(); radarCtx.arc(sx2, sy2, 3.5, 0, Math.PI*2);
+    radarCtx.fill(); radarCtx.stroke();
+  }
+  radarNestDot(playerNestPos.x - pp.x, playerNestPos.z - pp.z, '#' + player.color.toString(16).padStart(6,'0'));
+  for (const id in remoteNests) {
+    const rn = remoteNests[id];
+    const c = remotePlayers[id] ? remotePlayers[id].color : 0x888888;
+    radarNestDot(rn.pos.x - pp.x, rn.pos.z - pp.z, '#' + c.toString(16).padStart(6,'0'));
   }
 
   // center dot
@@ -1245,7 +1334,20 @@ nestHudEl.innerHTML = 'nest: <b>0</b> / ' + NEST_WIN + '<br>carrying: <b>0</b>';
 document.body.appendChild(nestHudEl);
 
 function updateNestHUD() {
-  nestHudEl.innerHTML = 'nest: <b>' + nestState.banked + '</b> / ' + NEST_WIN + '<br>carrying: <b>' + nestState.carried + '</b>';
+  let html = 'nest: <b>' + nestState.banked + '</b> / ' + NEST_WIN + '<br>carrying: <b>' + nestState.carried + '</b>';
+  if (nestState.carried > 0 && player.mesh) {
+    const ry = player.mesh.rotation.y;
+    const dx = playerNestPos.x - player.mesh.position.x;
+    const dz = playerNestPos.z - player.mesh.position.z;
+    const dist = Math.round(Math.sqrt(dx*dx + dz*dz));
+    const fwd_x = -Math.sin(ry), fwd_z = -Math.cos(ry);
+    const rgt_x =  Math.cos(ry), rgt_z = -Math.sin(ry);
+    const rel = Math.atan2(dx*rgt_x + dz*rgt_z, dx*fwd_x + dz*fwd_z);
+    const arrows = ['↑','↗','→','↘','↓','↙','←','↖'];
+    const idx = Math.round(((rel + Math.PI*2) % (Math.PI*2)) / (Math.PI*2) * 8) % 8;
+    html += '<br><span style="color:#ff8800;font-size:15px">' + arrows[idx] + '</span> <span style="color:#cc6600">' + dist + 'm</span>';
+  }
+  nestHudEl.innerHTML = html;
 }
 
 // ── GAME LOOP ───────────────────────────────────────────
@@ -1361,6 +1463,7 @@ function animate() {
       // Both birds flash white briefly
       if (!player.hitFlash) {
         player.hitFlash = 0.3;
+        playBump();
         const dropped = nestState.carried;
         if (dropped > 0) {
           nestState.carried = 0;
@@ -1559,7 +1662,8 @@ function animate() {
     nestState.banked += nestState.carried;
     player.score = nestState.banked;
     showZoneFlash('+' + nestState.carried + ' banked!', '#22cc44');
-    playGemCollect(1108);
+    playBankGems(nestState.carried);
+    burstParticles(nestGroup.position.clone().add(new THREE.Vector3(0, 1, 0)), 0xffaa00);
     nestState.carried = 0;
     updateNestHUD();
     if (nestState.banked >= NEST_WIN) triggerWin(playerName);
