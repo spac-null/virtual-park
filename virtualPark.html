@@ -168,6 +168,7 @@ canvas{display:block;cursor:none}
   <div id="msg-log-list" style="overflow-y:auto;max-height:280px;padding:6px 0;"></div>
 </div>
 <div id="msg-log-btn" style="position:absolute;bottom:14px;right:14px;z-index:10;pointer-events:auto;font-family:'Courier New',monospace;font-size:11px;color:#1a1a2e;background:rgba(255,255,255,0.88);border:1px solid rgba(0,100,200,0.2);border-radius:4px;padding:4px 10px;cursor:pointer;display:none;">◈ MSG</div>
+<div id="chat-toast" style="position:absolute;bottom:170px;left:50%;transform:translateX(-50%);z-index:12;pointer-events:none;display:none;flex-direction:column;gap:5px;align-items:center;width:340px;max-width:90vw;"></div>
 
 <div id="esc-menu" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;z-index:40;background:rgba(0,0,20,0.72);backdrop-filter:blur(3px);font-family:'Courier New',monospace;align-items:center;justify-content:center;flex-direction:column;">
   <div style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:12px;padding:32px 48px;min-width:320px;text-align:center;">
@@ -244,12 +245,8 @@ const adjectives = ['swift','dark','bright','keen','wild','bold','sharp','cold',
 const nouns = ['hawk','crow','kite','swift','raven','tern','heron','owl','crane','wren',
                'finch','lark','egret','falcon','osprey','jay','gull','dove','merlin','shrike'];
 
-let playerName = localStorage.getItem('vp_playerName');
-if (!playerName) {
-  playerName = pick(adjectives) + '-' + pick(nouns);
-  localStorage.setItem('vp_playerName', playerName);
-}
-{ const inp = document.getElementById('cs-name-input'); if (inp) { inp.placeholder = playerName; inp.value = ''; } }
+let playerName = localStorage.getItem('vp_playerName') || '';
+{ const inp = document.getElementById('cs-name-input'); if (inp) { inp.value = playerName; inp.placeholder = 'your name'; } }
 
 // ── RENDERER & SCENE ────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -1572,6 +1569,32 @@ function renderMsgLog() {
 document.getElementById('msg-log-btn')?.addEventListener('click', toggleMsgLog);
 document.getElementById('msg-log-close')?.addEventListener('click', toggleMsgLog);
 
+// ── CHAT TOAST ──────────────────────────────────────────
+const toastEl = document.getElementById('chat-toast');
+let toastHideTimer = null;
+const toastQueue = [];  // { text, color }
+const isMobileDevice = () => window.matchMedia('(hover:none) and (pointer:coarse)').matches || window.innerWidth < 600;
+
+function showChatToast(text, color) {
+  if (!toastEl) return;
+  toastQueue.unshift({ text, color: color || '#ffffff' });
+  const maxLines = isMobileDevice() ? 2 : 3;
+  while (toastQueue.length > maxLines) toastQueue.pop();
+  const lineMax = isMobileDevice() ? 28 : 48;
+  toastEl.innerHTML = toastQueue.map(m => {
+    const display = m.text.length > lineMax ? m.text.slice(0, lineMax - 1) + '…' : m.text;
+    return `<div style="background:rgba(10,10,30,0.82);border:1px solid ${m.color};border-radius:6px;padding:5px 12px;font-family:'Courier New',monospace;font-size:${isMobileDevice()?'12px':'13px'};color:#fff;text-shadow:0 0 6px ${m.color};white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;">${display}</div>`;
+  }).join('');
+  toastEl.style.display = 'flex';
+  toastEl.style.opacity = '1';
+  if (toastHideTimer) clearTimeout(toastHideTimer);
+  toastHideTimer = setTimeout(() => {
+    toastEl.style.transition = 'opacity 0.8s';
+    toastEl.style.opacity = '0';
+    setTimeout(() => { toastEl.style.display = 'none'; toastEl.style.transition = ''; }, 800);
+  }, 5000);
+}
+
 // ── TRACES ──────────────────────────────────────────────
 const traces = [];
 
@@ -1642,7 +1665,9 @@ function addTrace(x, z, y, text, color, name) {
   g.position.set(x, dropY, z);
   scene.add(g);
   traces.push({ group: g, life: 120, text });  // 2 min lifetime
-  pushMsgLog((name ? '[' + name + '] ' : '') + text, color);
+  const logLine = (name ? '[' + name + '] ' : '') + text;
+  pushMsgLog(logLine, color);
+  showChatToast(logLine, color);
 }
 
 function sendTrace(text) {
@@ -1924,11 +1949,14 @@ window.addEventListener('touchstart', onFirstInteraction);
 
 function startGame(role) {
   const inp = document.getElementById('cs-name-input');
-  if (inp && inp.value.trim()) {
-    playerName = inp.value.trim().slice(0, 20);
-    localStorage.setItem('vp_playerName', playerName);
-    player.name = playerName;
+  const name = inp ? inp.value.trim().slice(0, 20) : '';
+  if (!name) {
+    if (inp) { inp.style.border = '2px solid #ff3333'; inp.focus(); inp.placeholder = 'enter a name first'; }
+    return;
   }
+  playerName = name;
+  localStorage.setItem('vp_playerName', playerName);
+  player.name = playerName;
   playerRole = role;
   document.getElementById('char-select').style.display = 'none';
   updateLivesHUD();
@@ -1946,8 +1974,10 @@ function startGame(role) {
   const msgBtn = document.getElementById('msg-log-btn');
   if (msgBtn) msgBtn.style.display = 'block';
   // mobile button setup
-  const isMobile = window.matchMedia('(hover:none) and (pointer:coarse)').matches;
+  const isMobile = window.matchMedia('(hover:none) and (pointer:coarse)').matches || window.innerWidth < 600;
   if (isMobile) {
+    const joyEl = document.getElementById('mobile-joy');
+    if (joyEl) joyEl.style.display = 'block';
     const fBtn = document.getElementById('mobile-flap');
     const fBaz = document.getElementById('mobile-fire');
     const fRkt = document.getElementById('mobile-rocket');
