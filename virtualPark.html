@@ -2776,14 +2776,10 @@
             // First, handle rotation based on left/right inputs
             const rotationSpeed = 0.05;
             if (left) {
-                // Rotate bird counter-clockwise
-                birdGroup.rotation.y += rotationSpeed;
-                console.log("Rotating LEFT, angle:", birdGroup.rotation.y);
+                birdGroup.rotation.y -= rotationSpeed;
             }
             if (right) {
-                // Rotate bird clockwise
-                birdGroup.rotation.y -= rotationSpeed;
-                console.log("Rotating RIGHT, angle:", birdGroup.rotation.y);
+                birdGroup.rotation.y += rotationSpeed;
             }
             
             // Then move forward/backward in the direction the bird is facing
@@ -2800,10 +2796,6 @@
                 birdGroup.position.x += directionX * moveSpeed;
                 birdGroup.position.z += directionZ * moveSpeed;
                 
-                console.log("Moving in facing direction:", 
-                    forward ? "FORWARD" : "BACKWARD", 
-                    "New position:", 
-                    birdGroup.position.toArray().map(n => n.toFixed(2)));
             }
             
             // Wing animation - flap faster when moving forward
@@ -2888,7 +2880,7 @@
             // Calculate camera position based on bird rotation (always behind)
             const cameraDistance = 10; // Distance behind bird
             const cameraHeight = 5;    // Height above bird
-            const cameraLag = 0.08;    // How quickly camera catches up (lower = smoother)
+            const cameraLag = 0.14;    // How quickly camera catches up (lower = smoother)
             
             // Calculate ideal camera position (always behind the bird)
             const angle = birdGroup.rotation.y; // Bird's current facing angle
