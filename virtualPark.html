@@ -2461,8 +2461,13 @@ function animate() {
   while (dyaw < -Math.PI) dyaw += Math.PI * 2;
   camState.yaw += dyaw * Math.min(3.5 * dt, 1);
 
-  // Smooth target position (spring-arm, not instant snap)
-  camState.smoothPos.lerp(player.mesh.position, Math.min(6 * dt, 1));
+  // Smooth XZ always; when landed smooth Y slowly against terrain (not bird Y which snaps every frame)
+  const targetY = player.landed
+    ? terrainY(player.mesh.position.x, player.mesh.position.z) + 0.7
+    : player.mesh.position.y;
+  camState.smoothPos.x = lerp(camState.smoothPos.x, player.mesh.position.x, Math.min(6 * dt, 1));
+  camState.smoothPos.z = lerp(camState.smoothPos.z, player.mesh.position.z, Math.min(6 * dt, 1));
+  camState.smoothPos.y = lerp(camState.smoothPos.y, targetY, Math.min(player.landed ? 1.5 * dt : 6 * dt, 1));
 
   // Camera sits behind+above bird using lagged yaw
   _tv1.set(0, 3, 13);
