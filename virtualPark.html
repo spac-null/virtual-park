@@ -2252,11 +2252,11 @@ function animate() {
   if (keys['KeyD'] || keys['ArrowRight']) player.bankAngle += rollRate * dt;
   if (joyX < -0.2) {
     player.bankAngle -= rollRate * dt * Math.abs(joyX);
-    player.mesh.rotation.y += Math.abs(joyX) * 2.5 * dt; // direct yaw on mobile
+    player.mesh.rotation.y += Math.abs(joyX) * 1.4 * dt;
   }
   if (joyX > 0.2) {
     player.bankAngle += rollRate * dt * joyX;
-    player.mesh.rotation.y -= joyX * 2.5 * dt;
+    player.mesh.rotation.y -= joyX * 1.4 * dt;
   }
   } // end !landed input block
 
@@ -2495,28 +2495,38 @@ function animate() {
     _tv1.copy(player.mesh.position); _tv1.y += 1.2;
     camera.lookAt(_tv1);
   } else {
-  // Camera yaw: desktop lags for smooth cinematic feel; mobile snaps so it always faces where bird faces
   const isTouchDevice = navigator.maxTouchPoints > 0;
+
+  if (isTouchDevice) {
+    // Mobile: rigid camera — always exactly behind bird, no smoothing, no lag
+    const yaw = player.mesh.rotation.y;
+    camera.position.set(
+      player.mesh.position.x + Math.sin(yaw) * 13,
+      player.mesh.position.y + 3,
+      player.mesh.position.z + Math.cos(yaw) * 13
+    );
+    _tv1.copy(player.mesh.position);
+    _tv1.y += 1.5;
+    camera.lookAt(_tv1);
+  } else {
+  // Desktop: lag camera yaw for smooth cinematic feel
   let dyaw = player.mesh.rotation.y - camState.yaw;
   while (dyaw > Math.PI)  dyaw -= Math.PI * 2;
   while (dyaw < -Math.PI) dyaw += Math.PI * 2;
-  camState.yaw += dyaw * (isTouchDevice ? 1 : Math.min(3.5 * dt, 1));
+  camState.yaw += dyaw * Math.min(3.5 * dt, 1);
 
-  // Smooth XZ always; when landed smooth Y slowly against terrain (not bird Y which snaps every frame)
   const targetY = player.landed
     ? terrainY(player.mesh.position.x, player.mesh.position.z) + 0.7
     : player.mesh.position.y;
-  const posFollow = isTouchDevice ? 1 : Math.min(6 * dt, 1);
-  camState.smoothPos.x = lerp(camState.smoothPos.x, player.mesh.position.x, posFollow);
-  camState.smoothPos.z = lerp(camState.smoothPos.z, player.mesh.position.z, posFollow);
-  camState.smoothPos.y = lerp(camState.smoothPos.y, targetY, isTouchDevice ? Math.min(4 * dt, 1) : Math.min(player.landed ? 1.5 * dt : 6 * dt, 1));
+  camState.smoothPos.x = lerp(camState.smoothPos.x, player.mesh.position.x, Math.min(6 * dt, 1));
+  camState.smoothPos.z = lerp(camState.smoothPos.z, player.mesh.position.z, Math.min(6 * dt, 1));
+  camState.smoothPos.y = lerp(camState.smoothPos.y, targetY, Math.min(player.landed ? 1.5 * dt : 6 * dt, 1));
 
-  // Camera sits behind+above bird using lagged yaw
   _tv1.set(0, 3, 13);
   _camEuler.set(0, camState.yaw, 0);
   _tv1.applyEuler(_camEuler);
   _tv2.copy(camState.smoothPos).add(_tv1);
-  camera.position.lerp(_tv2, Math.min(4 * dt, 1));  // softer follow = no shake
+  camera.position.lerp(_tv2, Math.min(4 * dt, 1));
 
   // Look target: ahead of bird + slight altitude bias from pitch
   if (mouseRightDown) {
@@ -2529,7 +2539,7 @@ function animate() {
     _tv1.y += 1.5 + player.pitchAngle * 2; // camera tilts with pitch — feels responsive
   }
   camera.lookAt(_tv1);
-  // No rotation.z — lookAt handles full orientation cleanly, no fighting
+  } // end desktop camera block
   } // end bird camera block
 
   // ── GEMS UPDATE ─────────────────────────────────────
