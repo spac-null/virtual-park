@@ -165,7 +165,7 @@ canvas{display:block;cursor:none;position:fixed;top:0;left:0}
 <div id="mobile-joy"><div id="joy-base"><div id="joy-thumb"></div></div></div>
 <div id="mobile-flap" class="mob-btn">FLAP</div>
 <div id="mobile-egg" class="mob-btn">EGG</div>
-<div id="mobile-hover" class="mob-btn">◈</div>
+<div id="mobile-hover" class="mob-btn">HVR</div>
 <div id="mobile-fire" class="mob-btn">FIRE</div>
 <div id="mobile-rocket" class="mob-btn">🚀</div>
 <div id="mobile-jump" class="mob-btn">↑</div>
@@ -778,15 +778,24 @@ if (joyBase) {
     joyX = fx / maxR;
     joyY = fy / maxR;
   }
+  let joyTouchId = null;
   joyBase.addEventListener('touchstart', e => {
-    e.preventDefault(); joyActive = true;
-    joyMove(e.touches[0].clientX, e.touches[0].clientY);
+    e.preventDefault();
+    joyTouchId = e.changedTouches[0].identifier;
+    joyActive = true;
+    joyMove(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
   });
   window.addEventListener('touchmove', e => {
-    if (joyActive && e.touches.length > 0) joyMove(e.touches[0].clientX, e.touches[0].clientY);
+    if (!joyActive) return;
+    for (const t of e.changedTouches) {
+      if (t.identifier === joyTouchId) { joyMove(t.clientX, t.clientY); break; }
+    }
   });
-  window.addEventListener('touchend', () => {
-    joyActive = false; joyX = 0; joyY = 0;
+  window.addEventListener('touchend', e => {
+    for (const t of e.changedTouches) {
+      if (t.identifier !== joyTouchId) continue;
+      joyActive = false; joyTouchId = null; joyX = 0; joyY = 0;
+    }
     joyThumb.style.marginLeft = '-20px';
     joyThumb.style.marginTop = '-20px';
   });
@@ -1573,6 +1582,10 @@ let msgLogOpen = false;
 
 function toggleMsgLog() {
   msgLogOpen = !msgLogOpen;
+  // on mobile raise panel above game buttons when open, lower when closed
+  const hasTouch = navigator.maxTouchPoints > 0;
+  const mobBtns = document.querySelectorAll('.mob-btn, #mobile-joy');
+  mobBtns.forEach(el => { el.style.visibility = (msgLogOpen && hasTouch) ? 'hidden' : ''; });
   const panel = document.getElementById('msg-log');
   const btn = document.getElementById('msg-log-btn');
   if (panel) panel.style.display = msgLogOpen ? 'flex' : 'none';
