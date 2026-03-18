@@ -551,6 +551,18 @@
             miniMapVisible: true,
             currentMovementScale: 1.0,
             
+            // Sky and time settings
+            timeOfDay: 0.5, // 0 = midnight, 0.5 = noon, 1 = midnight again
+            skyUpdateInterval: 100, // ms between sky updates
+            lastSkyUpdate: 0,
+            weather: 'clear', // can be 'clear', 'cloudy', 'rainy', 'foggy'
+            weatherSettings: {
+                clear: { fogDensity: 0.015, brightness: 1.0 },
+                cloudy: { fogDensity: 0.025, brightness: 0.8 },
+                rainy: { fogDensity: 0.035, brightness: 0.6 },
+                foggy: { fogDensity: 0.05, brightness: 0.5 }
+            },
+            
             // Performance settings
             maxAnimationObjects: 100,
             lowPolyMode: false,
@@ -1051,11 +1063,188 @@
             }
         }
         
+        // Sky and time variables
+        let sky, skyMaterial, stars;
+        
+        // Time and sky color mapping lookup tables
+        const skyColorTable = {
+            night: { 
+                top: new THREE.Color(0x000010),
+                bottom: new THREE.Color(0x101832)
+            },
+            dawn: { 
+                top: new THREE.Color(0x0E1B4D),
+                bottom: new THREE.Color(0xE67E22)
+            },
+            day: { 
+                top: new THREE.Color(0x0080FF),
+                bottom: new THREE.Color(0x87CEEB)
+            },
+            dusk: { 
+                top: new THREE.Color(0x0E1B4D),
+                bottom: new THREE.Color(0xFF5722)
+            }
+        };
+        
+        // Helper function to get sky colors based on time of day
+        function getSkyColors(time) {
+            // time should be between 0 and 1
+            // 0.0 = midnight, 0.25 = dawn, 0.5 = noon, 0.75 = dusk, 1.0 = midnight again
+            
+            // For debugging
+            console.log("Current time:", time);
+            
+            let topColor, bottomColor;
+            
+            if (time < 0.2 || time > 0.8) {
+                // Night (dark with stars)
+                topColor = skyColorTable.night.top.clone();
+                bottomColor = skyColorTable.night.bottom.clone();
+                
+                // Make stars visible
+                if (stars) stars.visible = true;
+            } 
+            else if (time < 0.3) {
+                // Dawn transition (sunrise)
+                const t = (time - 0.2) / 0.1; // normalize to 0-1 within this range
+                topColor = skyColorTable.night.top.clone().lerp(skyColorTable.dawn.top, t);
+                bottomColor = skyColorTable.night.bottom.clone().lerp(skyColorTable.dawn.bottom, t);
+                
+                // Fade out stars
+                if (stars) stars.visible = true;
+                if (stars) stars.material.opacity = 1 - t;
+            } 
+            else if (time < 0.4) {
+                // Dawn to day transition
+                const t = (time - 0.3) / 0.1;
+                topColor = skyColorTable.dawn.top.clone().lerp(skyColorTable.day.top, t);
+                bottomColor = skyColorTable.dawn.bottom.clone().lerp(skyColorTable.day.bottom, t);
+                
+                // Stars invisible during day
+                if (stars) stars.visible = false;
+            } 
+            else if (time < 0.6) {
+                // Full day
+                topColor = skyColorTable.day.top.clone();
+                bottomColor = skyColorTable.day.bottom.clone();
+                
+                // Stars invisible during day
+                if (stars) stars.visible = false;
+            }
+            else if (time < 0.7) {
+                // Day to dusk transition
+                const t = (time - 0.6) / 0.1;
+                topColor = skyColorTable.day.top.clone().lerp(skyColorTable.dusk.top, t);
+                bottomColor = skyColorTable.day.bottom.clone().lerp(skyColorTable.dusk.bottom, t);
+                
+                // Stars invisible during day/dusk transition
+                if (stars) stars.visible = false;
+            }
+            else if (time < 0.8) {
+                // Dusk to night transition
+                const t = (time - 0.7) / 0.1;
+                topColor = skyColorTable.dusk.top.clone().lerp(skyColorTable.night.top, t);
+                bottomColor = skyColorTable.dusk.bottom.clone().lerp(skyColorTable.night.bottom, t);
+                
+                // Stars appear
+                if (stars) stars.visible = true;
+                if (stars) stars.material.opacity = t;
+            }
+            
+            console.log(`Sky colors - top: ${topColor.getHexString()}, bottom: ${bottomColor.getHexString()}`);
+            
+            // Apply weather effects to colors
+            const weatherBrightness = config.weatherSettings[config.weather].brightness;
+            
+            // Adjust colors based on weather
+            if (weatherBrightness < 1.0) {
+                // Dim colors for cloudy/rainy/foggy weather
+                topColor.multiplyScalar(weatherBrightness);
+                bottomColor.multiplyScalar(weatherBrightness);
+                
+                // Add more blue/gray tint for cloudy/rainy weather
+                if (config.weather === 'cloudy' || config.weather === 'rainy') {
+                    topColor.lerp(new THREE.Color(0x465366), 0.3);
+                    bottomColor.lerp(new THREE.Color(0x465366), 0.2);
+                }
+                
+                // Add more gray for foggy weather
+                if (config.weather === 'foggy') {
+                    topColor.lerp(new THREE.Color(0x9ea3aa), 0.4);
+                    bottomColor.lerp(new THREE.Color(0x9ea3aa), 0.3);
+                }
+            }
+            
+            return { topColor, bottomColor };
+        }
+        
+        // Function to update sky colors
+        function updateSky() {
+            const now = performance.now();
+            
+            // Throttle updates for performance
+            if (now - config.lastSkyUpdate < config.skyUpdateInterval) {
+                return;
+            }
+            
+            config.lastSkyUpdate = now;
+            
+            // Get colors based on time of day
+            const { topColor, bottomColor } = getSkyColors(config.timeOfDay);
+            
+            // Update shader uniforms
+            if (skyMaterial && skyMaterial.uniforms) {
+                skyMaterial.uniforms.topColor.value = topColor;
+                skyMaterial.uniforms.bottomColor.value = bottomColor;
+                
+                // Force material update
+                skyMaterial.uniformsNeedUpdate = true;
+                skyMaterial.needsUpdate = true;
+            }
+            
+            // Update scene background and fog for consistency
+            scene.background = bottomColor.clone().lerp(topColor, 0.5);
+            scene.fog.color = bottomColor.clone();
+            
+            // Update fog density based on weather
+            const weatherFogDensity = config.weatherSettings[config.weather].fogDensity;
+            scene.fog.density = weatherFogDensity;
+            
+            // Add rain particles if weather is rainy (only once)
+            if (config.weather === 'rainy' && !scene.userData.rainEffect) {
+                createRainEffect();
+                scene.userData.rainEffect = true;
+            } else if (config.weather !== 'rainy' && scene.userData.rainEffect) {
+                // Remove rain if weather changed from rainy
+                removeRainEffect();
+                scene.userData.rainEffect = false;
+            }
+        }
+        
         // Create simplified sky for low-end devices
         function createSimpleSky() {
+            // Get colors based on time
+            const { topColor, bottomColor } = getSkyColors(config.timeOfDay);
+            
             // Just set a gradient background color
-            scene.background = new THREE.Color(0x0A0A18);
+            scene.background = bottomColor.clone();
+            scene.fog.color = bottomColor.clone();
             scene.fog.density = 0.02; // Increase fog to hide missing details
+            
+            // Setup time control - keyboard shortcut for testing (even in simple mode)
+            document.addEventListener('keydown', function(event) {
+                // Use Ctrl+T to change time of day
+                if (event.ctrlKey && event.code === 'KeyT') {
+                    // Advance time by 0.1 (10%)
+                    config.timeOfDay = (config.timeOfDay + 0.1) % 1.0;
+                    console.log("Time changed to:", config.timeOfDay);
+                    
+                    // Update colors
+                    const { topColor, bottomColor } = getSkyColors(config.timeOfDay);
+                    scene.background = bottomColor.clone();
+                    scene.fog.color = bottomColor.clone();
+                }
+            });
         }
 
         // Create a more interesting ground texture - optimized for performance
@@ -1184,11 +1373,14 @@
             // Create a large sphere for the sky
             const skyGeometry = new THREE.SphereGeometry(400, segments, segments);
 
-            // For a space-like sky with stars - simplified shader for performance
-            const skyMaterial = new THREE.ShaderMaterial({
+            // Get initial sky colors based on time of day
+            const { topColor, bottomColor } = getSkyColors(config.timeOfDay);
+
+            // For a space-like sky with stars - dynamic shader for time-based colors
+            skyMaterial = new THREE.ShaderMaterial({
                 uniforms: {
-                    topColor: { value: new THREE.Color(0x000000) }, // Dark blue-black at top
-                    bottomColor: { value: new THREE.Color(0x101832) }, // Slightly lighter at bottom
+                    topColor: { value: topColor },
+                    bottomColor: { value: bottomColor },
                     offset: { value: 50 },
                     exponent: { value: 0.6 }
                 },
@@ -1214,13 +1406,35 @@
                 side: THREE.BackSide
             });
 
-            const sky = new THREE.Mesh(skyGeometry, skyMaterial);
+            sky = new THREE.Mesh(skyGeometry, skyMaterial);
             scene.add(sky);
 
             // Add stars to the sky - only if not in low-poly mode
             if (!config.lowPolyMode) {
                 addStars();
             }
+            
+            // Setup time and weather control - keyboard shortcuts
+            document.addEventListener('keydown', function(event) {
+                // Use Ctrl+T to change time of day
+                if (event.ctrlKey && event.code === 'KeyT') {
+                    // Advance time by 0.1 (10%)
+                    config.timeOfDay = (config.timeOfDay + 0.1) % 1.0;
+                    console.log("Time changed to:", config.timeOfDay);
+                    updateSky();
+                }
+                
+                // Use Ctrl+W to change weather
+                if (event.ctrlKey && event.code === 'KeyW') {
+                    // Cycle through weather types
+                    const weatherTypes = Object.keys(config.weatherSettings);
+                    const currentIndex = weatherTypes.indexOf(config.weather);
+                    const nextIndex = (currentIndex + 1) % weatherTypes.length;
+                    config.weather = weatherTypes[nextIndex];
+                    console.log("Weather changed to:", config.weather);
+                    updateSky();
+                }
+            });
         }
 
         // Add stars to the sky - optimized for performance
@@ -1249,7 +1463,13 @@
             }
 
             starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
-            const stars = new THREE.Points(starGeometry, starMaterial);
+            stars = new THREE.Points(starGeometry, starMaterial);
+            
+            // Set initial visibility based on time
+            if (config.timeOfDay > 0.2 && config.timeOfDay < 0.8) {
+                stars.visible = false;
+            }
+            
             scene.add(stars);
         }
         
@@ -3490,6 +3710,13 @@
                 updateMiniMap();
             }
             
+            // Update sky colors - already throttled internally
+            updateSky();
+            
+            // Auto increment time of day very slowly
+            // Complete day/night cycle takes about 10 minutes real-time
+            config.timeOfDay = (config.timeOfDay + delta * 0.0016) % 1.0;
+            
             // Render scene
             renderer.render(scene, camera);
             
@@ -4531,6 +4758,107 @@
             camera.rotation.x = Math.max(-Math.PI/3, Math.min(Math.PI/3, newVerticalAngle));
         }
 
+        // Create rain effect
+        let rainSystem = null;
+        
+        function createRainEffect() {
+            console.log("Creating rain effect");
+            
+            // Rain particle count - adjust based on performance settings
+            const rainCount = config.objectDetail === 'high' ? 5000 : 
+                             config.objectDetail === 'medium' ? 2000 : 1000;
+            
+            // Create rain geometry
+            const rainGeometry = new THREE.BufferGeometry();
+            const rainPositions = [];
+            const rainVelocities = [];
+            
+            // Create raindrops in a large volume above the scene
+            const size = config.worldSize * 1.2;
+            for (let i = 0; i < rainCount; i++) {
+                // Random positions in a large area above the scene
+                const x = (Math.random() - 0.5) * size;
+                const y = Math.random() * 100 + 20; // Height above ground
+                const z = (Math.random() - 0.5) * size;
+                
+                rainPositions.push(x, y, z);
+                
+                // Random but mostly downward velocity
+                const velocity = -1.5 - Math.random() * 2; // Downward speed
+                rainVelocities.push(0, velocity, 0);
+            }
+            
+            // Create attributes for position and velocity
+            rainGeometry.setAttribute('position', new THREE.Float32BufferAttribute(rainPositions, 3));
+            rainGeometry.setAttribute('velocity', new THREE.Float32BufferAttribute(rainVelocities, 3));
+            
+            // Rain material - slightly blue/white and translucent
+            const rainMaterial = new THREE.PointsMaterial({
+                color: 0xaaccff,
+                size: 0.3,
+                transparent: true,
+                opacity: 0.6,
+                blending: THREE.AdditiveBlending
+            });
+            
+            // Create particle system
+            rainSystem = new THREE.Points(rainGeometry, rainMaterial);
+            rainSystem.name = 'rainSystem';
+            
+            // Store velocities for animation
+            rainSystem.userData.velocities = rainVelocities;
+            
+            scene.add(rainSystem);
+        }
+        
+        // Update rain animation
+        function updateRain(delta) {
+            if (!rainSystem) return;
+            
+            const positions = rainSystem.geometry.attributes.position;
+            const groundLevel = 0; // Ground level Y coordinate
+            
+            // Update raindrop positions based on velocity
+            for (let i = 0; i < positions.count; i++) {
+                // Get the current Y position
+                const y = positions.getY(i);
+                
+                // Adjust the Y position based on velocity and delta time
+                const velocity = rainSystem.userData.velocities[i * 3 + 1]; // Y velocity
+                let newY = y + velocity * delta * 10; // Faster with scaling factor
+                
+                // If raindrop reaches ground, reset to top
+                if (newY < groundLevel) {
+                    newY = Math.random() * 100 + 20; // Reset to random height
+                    
+                    // Also randomize X and Z when resetting
+                    const size = config.worldSize * 1.2;
+                    const x = (Math.random() - 0.5) * size;
+                    const z = (Math.random() - 0.5) * size;
+                    
+                    positions.setX(i, x);
+                    positions.setZ(i, z);
+                }
+                
+                // Update position
+                positions.setY(i, newY);
+            }
+            
+            // Mark position attribute as needing update
+            positions.needsUpdate = true;
+        }
+        
+        // Remove rain effect
+        function removeRainEffect() {
+            if (rainSystem) {
+                scene.remove(rainSystem);
+                rainSystem.geometry.dispose();
+                rainSystem.material.dispose();
+                rainSystem = null;
+                console.log("Rain effect removed");
+            }
+        }
+        
         function showLocationPopup() {
             // Create popup container
             const popup = document.createElement('div');
