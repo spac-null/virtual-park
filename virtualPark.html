@@ -125,7 +125,7 @@ canvas{display:block;cursor:none}
     <tr><td>W / S</td><td>pitch (bird) / fwd-back (crab)</td></tr>
     <tr><td>A / D</td><td>bank &amp; turn (bird) / strafe (crab)</td></tr>
     <tr><td>Q / E</td><td>turn crab left / right</td></tr>
-    <tr><td>SPACE</td><td>flap (bird) / dash (crab)</td></tr>
+    <tr><td>SPACE</td><td>flap (bird) / rocket blast (crab)</td></tr>
     <tr><td>E</td><td>egg bomb (bird) / trace (crab)</td></tr>
     <tr><td>H</td><td>hover (freeze in air)</td></tr>
     <tr><td>M</td><td>message log</td></tr>
@@ -162,7 +162,7 @@ canvas{display:block;cursor:none}
     <button class="cs-btn" id="btn-duck">
       <div class="cs-icon">\(o_o)/</div>
       <div class="cs-name">CRAB</div>
-      <div class="cs-desc">WALK SIDEWAYS · BAZOOKA · DASH</div>
+      <div class="cs-desc">WALK SIDEWAYS · BAZOOKA · ROCKET BLAST</div>
     </button>
   </div>
 </div>
@@ -687,7 +687,7 @@ window.addEventListener('keydown', e => {
   if (e.key === '?' || e.key === '/') {
     document.getElementById('controls-overlay').classList.toggle('visible');
   }
-  if ((e.code === 'Space') && playerRole === 'duck') { e.preventDefault(); initAudio(); duckDash(); }
+  if ((e.code === 'Space') && playerRole === 'duck') { e.preventDefault(); initAudio(); fireRocket(); }
   if ((e.key === 'e' || e.key === 'E') && playerRole === 'bird' && !tracePrompt) { e.preventDefault(); initAudio(); dropEgg(); }
   if (e.key === 'h' || e.key === 'H') { hoverMode = !hoverMode; }
 });
@@ -932,19 +932,47 @@ function fireBarooka() {
   playBump(); // reuse bump sound for muzzle
 }
 
-function duckDash() {
+function fireRocket() {
   if (playerRole !== 'duck' || dashCooldown > 0) return;
-  dashCooldown = 1.2;
-  const dashDist = 14;
-  player.mesh.position.x -= Math.sin(duckYaw) * dashDist;
-  player.mesh.position.z -= Math.cos(duckYaw) * dashDist;
-  // clamp inside world
-  const dl = player.mesh.position.length();
-  if (dl > 82) player.mesh.position.multiplyScalar(82 / dl);
+  dashCooldown = 2.2;
+  initAudio();
+
+  // aim upward toward flying targets
+  const dir = new THREE.Vector3(-Math.sin(duckYaw), 0.55, -Math.cos(duckYaw)).normalize();
+  const sp = player.mesh.position.clone().addScaledVector(dir, 1.8).add(new THREE.Vector3(0, 0.6, 0));
+
+  // rocket mesh — elongated cylinder with glowing tip
+  const rocketG = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.13, 0.18, 1.1, 8),
+    new THREE.MeshLambertMaterial({ color: 0x888888, flatShading: true }));
+  body.rotation.z = Math.PI / 2;
+  rocketG.add(body);
+  const tip = new THREE.Mesh(
+    new THREE.ConeGeometry(0.13, 0.4, 8),
+    new THREE.MeshBasicMaterial({ color: 0xff3300 }));
+  tip.rotation.z = Math.PI / 2; tip.position.x = 0.75;
+  rocketG.add(tip);
+  const exhaust = new THREE.Mesh(
+    new THREE.SphereGeometry(0.22, 6, 4),
+    new THREE.MeshBasicMaterial({ color: 0xffaa00 }));
+  exhaust.position.x = -0.65;
+  rocketG.add(exhaust);
+
+  rocketG.position.copy(sp);
+  // orient rocket along travel direction
+  rocketG.quaternion.setFromUnitVectors(new THREE.Vector3(1,0,0), dir);
+  scene.add(rocketG);
+
+  burstParticles(sp.clone(), 0xff6600);
+  projectiles.push({ mesh: rocketG, vel: dir.clone().multiplyScalar(38), life: 4.0, isRocket: true, hitRadius: 7 });
+
+  // recoil — kick crab backward
+  player.mesh.position.x += Math.sin(duckYaw) * 3.5;
+  player.mesh.position.z += Math.cos(duckYaw) * 3.5;
   player.mesh.position.y = terrainY(player.mesh.position.x, player.mesh.position.z) + 0.5;
-  // dust burst
-  burstParticles(player.mesh.position.clone(), 0xddcc88);
-  showZoneFlash('DASH!', '#ffcc00');
+
+  showZoneFlash('🚀 ROCKET!', '#ff4400');
   playBump();
 }
 
@@ -975,10 +1003,14 @@ function updateProjectiles(dt) {
     let hit = false;
     if (p.mesh.position.y < gY + 0.5 || p.life <= 0) hit = true;
     if (!hit) {
+      const hr = p.hitRadius || 5;
       for (const id in remotePlayers) {
-        if (p.mesh.position.distanceTo(remotePlayers[id].mesh.position) < 5) {
-          player.score += 2; player.score = Math.min(player.score, 999);
-          showZoneFlash('+2 DIRECT HIT!', '#ff4400'); hit = true; break;
+        if (p.mesh.position.distanceTo(remotePlayers[id].mesh.position) < hr) {
+          const pts = p.isRocket ? 3 : 2;
+          player.score += pts; player.score = Math.min(player.score, 999);
+          showZoneFlash(p.isRocket ? '+3 ROCKET HIT! 🚀' : '+2 DIRECT HIT!', '#ff4400');
+          if (p.isRocket) triggerExplosion(p.mesh.position.clone());
+          hit = true; break;
         }
       }
     }
