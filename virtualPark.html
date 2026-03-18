@@ -667,6 +667,7 @@ const player = {
   isFlapping: false,
   flapAnim: 0,
   hitFlash: 0,
+  landed: false,
   color: 0x00b3ff,
   name: playerName
 };
@@ -989,7 +990,14 @@ function dropEgg() {
     new THREE.MeshBasicMaterial({ color: 0xff2200 }));
   stripe.rotation.x = Math.PI / 2; em.add(stripe);
   scene.add(em);
-  eggs.push({ mesh: em, vel: new THREE.Vector3(rand(-1,1)*1.5, 3, rand(-1,1)*1.5), life: 6.0, bounced: false });
+  // throw forward in facing direction + slight upward arc
+  const yaw = player.mesh.rotation.y;
+  const throwVel = new THREE.Vector3(
+    -Math.sin(yaw) * 14 + player.vel.x,
+    4,
+    -Math.cos(yaw) * 14 + player.vel.z
+  );
+  eggs.push({ mesh: em, vel: throwVel, life: 6.0, bounced: false });
 }
 
 function updateProjectiles(dt) {
@@ -1971,17 +1979,24 @@ function animate() {
   player.pitchAngle = clamp(player.pitchAngle, -1.0, 1.0);  // steeper dives
   player.bankAngle = lerp(player.bankAngle, 0, 3.5 * dt);   // quicker self-level
 
-  // flap
+  // flap — strong launch when landed
   if ((keys['Space'] || mobileFlap) && player.flapTimer <= 0) {
-    player.vel.y += 8.0;                          // stronger flap punch
-    player.speed = Math.max(player.speed, 10);
-    player.flapTimer = 0.25;                       // faster repeat flapping
+    player.vel.y += player.landed ? 14.0 : 8.0;  // bigger launch from ground
+    player.speed = Math.max(player.speed, player.landed ? 12 : 10);
+    player.landed = false;
+    player.flapTimer = 0.25;
     player.isFlapping = true;
     player.flapAnim = 0.25;
     playFlap();
   }
   player.flapTimer -= dt;
   mobileFlap = false;
+
+  // when landed — skip all physics, just sit
+  if (player.landed) {
+    player.speed = 0;
+    player.vel.set(0, 0, 0);
+  } else {
 
   // facing direction from yaw + pitch
   const yaw = player.mesh.rotation.y;
@@ -2033,14 +2048,21 @@ function animate() {
   // move
   _tv1.copy(player.vel).multiplyScalar(dt);
   player.mesh.position.add(_tv1);
+  } // end landed else (physics block)
   } // end hover else
 
-  // terrain collision — bird lands on ground rather than clipping through
+  // terrain collision — bird lands and perches on ground
   const groundY = terrainY(player.mesh.position.x, player.mesh.position.z);
-  if (player.mesh.position.y < groundY + 1.0) {
-    player.mesh.position.y = groundY + 1.0;
-    if (player.vel.y < 0) player.vel.y = 0;
-    player.speed = Math.max(player.speed - 4 * dt, 2);  // drag on ground
+  const landThresh = groundY + 0.7;
+  if (player.mesh.position.y <= landThresh) {
+    player.mesh.position.y = landThresh;
+    player.vel.set(0, 0, 0);
+    player.speed = 0;
+    player.pitchAngle = lerp(player.pitchAngle, 0, 10 * dt);
+    player.bankAngle  = lerp(player.bankAngle,  0, 10 * dt);
+    player.landed = true;
+  } else {
+    player.landed = false;
   }
 
   // world bounds — snap position first, then reflect velocity
