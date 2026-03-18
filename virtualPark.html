@@ -119,6 +119,7 @@ canvas{display:block;cursor:none}
     <tr><td>R-drag</td><td>free look</td></tr>
     <tr><td>TAB</td><td>scoreboard</td></tr>
     <tr><td>E</td><td>drop trace</td></tr>
+    <tr><td>R</td><td>respawn (if stuck)</td></tr>
     <tr><td>?</td><td>this overlay</td></tr>
   </table>
 </div>
@@ -895,6 +896,16 @@ window.addEventListener('keydown', e => {
     if (t) sendTrace(t);
     tracePrompt = false;
   }
+  // R = emergency respawn (if stuck at wall or anything else)
+  if (e.key === 'r' || e.key === 'R') {
+    player.mesh.position.set(rand(-8, 8), CFG.spawnY, rand(-8, 8));
+    player.vel.set(0, 0, 0);
+    player.speed = 3;
+    player.pitchAngle = 0;
+    player.bankAngle = 0;
+    camState.smoothPos.copy(player.mesh.position);
+    showZoneFlash('respawned', '#4ade80');
+  }
 });
 
 // ── GHOST TRAIL ─────────────────────────────────────────
@@ -1183,24 +1194,25 @@ function animate() {
   _tv1.copy(player.vel).multiplyScalar(dt);
   player.mesh.position.add(_tv1);
 
-  // world bounds — bounce back, don't stick
+  // world bounds — snap position first, then reflect velocity
   const posLen = player.mesh.position.length();
-  if (posLen > 85) {
-    // Reflect velocity away from boundary and push hard inward
-    _tv1.copy(player.mesh.position).normalize();
-    const inward = -player.vel.dot(_tv1);
-    if (inward < 0) player.vel.addScaledVector(_tv1, -inward * 1.8 + 8);
-    player.vel.addScaledVector(_tv1, -12); // strong push toward center
-    player.speed *= 0.6;
+  if (posLen > 83) {
+    player.mesh.position.multiplyScalar(82 / posLen);   // snap inside — kills the lock
+    _tv1.copy(player.mesh.position).normalize();         // outward normal
+    const outSpd = player.vel.dot(_tv1);
+    if (outSpd > 0) player.vel.addScaledVector(_tv1, -outSpd * 1.6); // reflect outward component
+    player.speed *= 0.65;
+    showZoneFlash('turn around!', '#ff8800');
   }
   if (player.mesh.position.y < CFG.floorY) {
-    player.mesh.position.y = CFG.floorY + 0.5;
-    player.vel.y = Math.abs(player.vel.y) * 0.5 + 3; // bounce up
-    player.pitchAngle = Math.max(player.pitchAngle, -0.2); // nose up
+    player.mesh.position.y = CFG.floorY;                // snap to floor
+    if (player.vel.y < 0) player.vel.y = -player.vel.y * 0.45 + 2;
+    player.pitchAngle = Math.max(player.pitchAngle, -0.1);
   }
   if (player.mesh.position.y > CFG.ceilY + 5) {
-    player.vel.y = -(Math.abs(player.vel.y) * 0.5 + 2); // bounce down
-    player.pitchAngle = Math.min(player.pitchAngle, 0.2);
+    player.mesh.position.y = CFG.ceilY + 5;             // snap to ceiling
+    if (player.vel.y > 0) player.vel.y = -player.vel.y * 0.45;
+    player.pitchAngle = Math.min(player.pitchAngle, 0.1);
   }
 
   // ── BIRD COLLISION ───────────────────────────────────
