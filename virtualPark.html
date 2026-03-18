@@ -1004,7 +1004,7 @@ function fireBarooka() {
   if (playerRole !== 'duck' || bazookaCooldown > 0 || !audioCtx) return;
   bazookaCooldown = 0.75;
   initAudio();
-  const dir = new THREE.Vector3(-Math.sin(duckYaw), 0.12, -Math.cos(duckYaw)).normalize();
+  const dir = new THREE.Vector3(-Math.sin(duckYaw), 0.45, -Math.cos(duckYaw)).normalize();
   const sp = player.mesh.position.clone().addScaledVector(dir, 1.6).add(new THREE.Vector3(0, 0.5, 0));
   const pm = new THREE.Mesh(
     new THREE.SphereGeometry(0.28, 6, 5),
@@ -1099,7 +1099,7 @@ function updateProjectiles(dt) {
           const pts = p.isRocket ? 3 : 2;
           player.score += pts; player.score = Math.min(player.score, 999);
           showZoneFlash(p.isRocket ? '+3 ROCKET HIT! 🚀' : '+2 DIRECT HIT!', '#ff4400');
-          if (p.isRocket) triggerExplosion(p.mesh.position.clone());
+          if (p.isRocket) explode(p.mesh.position.clone(), 2.0);
           if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'hit', targetId: id, fromName: playerName }));
           hit = true; break;
         }
@@ -1133,7 +1133,7 @@ function updateEggs(dt) {
     // check egg hit on remote players
     let eHit = false;
     for (const id in remotePlayers) {
-      if (e.mesh.position.distanceTo(remotePlayers[id].mesh.position) < 3.5) {
+      if (e.mesh.position.distanceTo(remotePlayers[id].mesh.position) < 6.0) {
         if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'hit', targetId: id, fromName: playerName }));
         eHit = true; break;
       }
@@ -1699,7 +1699,7 @@ function addTrace(x, z, y, text, color, name) {
   const tex = new THREE.CanvasTexture(canvas);
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
   const aspect = canvas.width / canvas.height;
-  sprite.scale.set(5 * aspect / 2, 2.5, 1);
+  sprite.scale.set(aspect * 1.1, 1.1, 1);
   sprite.position.set(0, 2.2, 0);  // raised above terrain/rocks
   g.add(sprite);
 
@@ -2689,6 +2689,8 @@ function animate() {
   updateOnlineHUD();
   const hoverEl = document.getElementById('hover-hud');
   if (hoverEl) hoverEl.style.display = (hoverMode && playerRole === 'bird') ? 'block' : 'none';
+  const _hvrBtn = document.getElementById('mobile-hover');
+  if (_hvrBtn) _hvrBtn.style.background = hoverMode ? 'rgba(120,120,255,0.95)' : 'rgba(80,80,200,0.75)';
 
   // ── RENDER ──────────────────────────────────────────
   renderer.render(scene, camera);
