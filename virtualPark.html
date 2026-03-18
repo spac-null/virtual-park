@@ -73,7 +73,7 @@ canvas{display:block;cursor:none}
   #crosshair{display:none}
 }
 
-.name-label{position:absolute;z-index:8;pointer-events:none;font-family:'Courier New',monospace;font-size:10px;color:#1a1a2e;text-shadow:0 1px 2px rgba(255,255,255,0.8);white-space:nowrap;transform:translate(-50%,-100%)}
+.name-label{position:absolute;z-index:8;pointer-events:none;font-family:'Courier New',monospace;font-size:13px;font-weight:bold;color:#ffffff;text-shadow:0 0 4px #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;white-space:nowrap;transform:translate(-50%,-100%);letter-spacing:0.5px}
 #char-select{position:absolute;top:0;left:0;width:100%;height:100%;background:#4488dd;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:50;font-family:'Courier New',monospace}
 .cs-title{font-size:38px;color:#1a1a2e;letter-spacing:6px;margin-bottom:6px;font-weight:bold}
 .cs-sub{font-size:12px;color:#555;letter-spacing:3px;text-transform:uppercase;margin-bottom:40px}
@@ -132,6 +132,7 @@ canvas{display:block;cursor:none}
     <tr><td>M</td><td>message log</td></tr>
     <tr><td>R-drag</td><td>free look</td></tr>
     <tr><td>TAB</td><td>scoreboard</td></tr>
+    <tr><td>C</td><td>jump (crab)</td></tr>
     <tr><td>R</td><td>respawn (if stuck)</td></tr>
     <tr><td>?</td><td>this overlay</td></tr>
   </table>
@@ -150,6 +151,18 @@ canvas{display:block;cursor:none}
   <div id="msg-log-list" style="overflow-y:auto;max-height:280px;padding:6px 0;"></div>
 </div>
 <div id="msg-log-btn" style="position:absolute;bottom:14px;right:14px;z-index:10;pointer-events:auto;font-family:'Courier New',monospace;font-size:11px;color:#1a1a2e;background:rgba(255,255,255,0.88);border:1px solid rgba(0,100,200,0.2);border-radius:4px;padding:4px 10px;cursor:pointer;display:none;">◈ MSG</div>
+
+<div id="esc-menu" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;z-index:40;background:rgba(0,0,20,0.72);backdrop-filter:blur(3px);font-family:'Courier New',monospace;align-items:center;justify-content:center;flex-direction:column;">
+  <div style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:12px;padding:32px 48px;min-width:320px;text-align:center;">
+    <div style="color:#fff;font-size:20px;font-weight:bold;letter-spacing:2px;margin-bottom:6px;">◈ PARK</div>
+    <div style="color:rgba(255,255,255,0.5);font-size:11px;margin-bottom:24px;">world is still running</div>
+    <div id="esc-scoreboard" style="margin-bottom:24px;text-align:left;"></div>
+    <div style="display:flex;gap:12px;justify-content:center;">
+      <button id="esc-resume" style="font-family:'Courier New',monospace;font-size:13px;padding:10px 24px;background:rgba(255,255,255,0.9);border:none;border-radius:6px;cursor:pointer;font-weight:bold;">▶ RESUME</button>
+      <button id="esc-quit" style="font-family:'Courier New',monospace;font-size:13px;padding:10px 24px;background:rgba(255,80,80,0.8);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:bold;">✕ QUIT</button>
+    </div>
+  </div>
+</div>
 
 <div id="char-select">
   <div class="cs-title">THE GARDEN ABOVE</div>
@@ -1417,6 +1430,40 @@ let camShake = 0;
 let bazookaCooldown = 0;
 let eggCooldown = 0;
 let dashCooldown = 0;
+let crabJumpVel = 0;
+
+let escMenuOpen = false;
+
+function renderEscScoreboard() {
+  const el = document.getElementById('esc-scoreboard');
+  if (!el) return;
+  const all = [{ name: playerName, score: player.score, me: true }];
+  for (const id in remotePlayers) {
+    all.push({ name: remotePlayers[id].name || '?', score: remotePlayers[id].score || 0, me: false });
+  }
+  all.sort((a, b) => b.score - a.score);
+  el.innerHTML = all.map((p, i) =>
+    `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.07);font-family:'Courier New',monospace;font-size:13px;color:${p.me ? '#ffdd44' : '#ffffff'};">
+      <span>${i+1}. ${p.name}${p.me ? ' ◀' : ''}</span>
+      <span>${p.score} pts</span>
+    </div>`
+  ).join('');
+}
+
+function openEscMenu() {
+  escMenuOpen = true;
+  const el = document.getElementById('esc-menu');
+  if (el) { el.style.display = 'flex'; renderEscScoreboard(); }
+}
+
+function closeEscMenu() {
+  escMenuOpen = false;
+  const el = document.getElementById('esc-menu');
+  if (el) el.style.display = 'none';
+}
+
+document.getElementById('esc-resume')?.addEventListener('click', closeEscMenu);
+document.getElementById('esc-quit')?.addEventListener('click', () => location.reload());
 function sendMove() {
   if (!ws || ws.readyState !== 1) return;
   const now = performance.now();
@@ -1459,9 +1506,9 @@ function renderMsgLog() {
   const list = document.getElementById('msg-log-list');
   if (!list) return;
   list.innerHTML = msgLog.map(m =>
-    `<div style="padding:4px 12px;border-bottom:1px solid rgba(255,255,255,0.05);font-family:'Courier New',monospace;font-size:11px;">
-      <span style="color:rgba(255,255,255,0.35);font-size:10px;">${m.ts}</span>
-      <span style="color:${m.color};margin-left:4px;">${m.text}</span>
+    `<div style="padding:5px 12px;border-bottom:1px solid rgba(255,255,255,0.08);font-family:'Courier New',monospace;font-size:13px;line-height:1.4;">
+      <span style="color:rgba(255,255,255,0.5);font-size:11px;">${m.ts}</span>
+      <span style="color:#ffffff;margin-left:6px;font-weight:bold;text-shadow:0 0 6px ${m.color},0 0 2px #000;">${m.text}</span>
     </div>`
   ).join('');
 }
@@ -1533,9 +1580,10 @@ function addTrace(x, z, y, text, color) {
 
   // Gentle bob animation data
   g.userData.phase = Math.random() * Math.PI * 2;
-  const groundSnap = terrainY(x, z) + 1.2;  // sit just above terrain
-  g.userData.baseY = groundSnap;
-  g.position.set(x, groundSnap, z);
+  const groundSnap = terrainY(x, z) + 1.2;
+  const dropY = (y && y > groundSnap + 2) ? y : groundSnap;  // keep air drops in the air
+  g.userData.baseY = dropY;
+  g.position.set(x, dropY, z);
   scene.add(g);
   traces.push({ group: g, life: 120, text });  // 2 min lifetime
   pushMsgLog(text, color);
@@ -1568,6 +1616,8 @@ window.addEventListener('keydown', e => {
     camState.smoothPos.copy(player.mesh.position);
     showZoneFlash('respawned', '#4ade80');
   }
+  if (e.key === 'Escape' && playerRole) { escMenuOpen ? closeEscMenu() : openEscMenu(); }
+  if (e.code === 'KeyC' && playerRole === 'duck' && crabJumpVel === 0) { initAudio(); crabJumpVel = 9; player.mesh.position.y += 0.3; playFlap(); }
 });
 
 // ── GHOST TRAIL ─────────────────────────────────────────
@@ -1960,7 +2010,16 @@ function animate() {
     const dl = player.mesh.position.length();
     if (dl > 82) player.mesh.position.multiplyScalar(82 / dl);
     const gy = terrainY(player.mesh.position.x, player.mesh.position.z);
-    player.mesh.position.y = gy + 0.5;
+    if (crabJumpVel !== 0) {
+      player.mesh.position.y += crabJumpVel * dt;
+      crabJumpVel -= 18 * dt;
+      if (player.mesh.position.y <= gy + 0.5) {
+        player.mesh.position.y = gy + 0.5;
+        crabJumpVel = 0;
+      }
+    } else {
+      player.mesh.position.y = gy + 0.5;
+    }
     player.mesh.rotation.y = duckYaw;
     // lean slightly in strafe direction — crab shuffle feel
     const targetLean = strafeDir * 0.22;
@@ -2001,7 +2060,7 @@ function animate() {
 
   // flap — strong launch when landed
   if ((keys['Space'] || mobileFlap) && player.flapTimer <= 0) {
-    player.vel.y += player.landed ? 14.0 : 8.0;  // bigger launch from ground
+    player.vel.y += player.landed ? 14.0 : 8.0;
     player.speed = Math.max(player.speed, player.landed ? 12 : 10);
     player.landed = false;
     player.flapTimer = 0.25;
@@ -2011,12 +2070,6 @@ function animate() {
   }
   player.flapTimer -= dt;
   mobileFlap = false;
-
-  // when landed — skip all physics, just sit
-  if (player.landed) {
-    player.speed = 0;
-    player.vel.set(0, 0, 0);
-  } else {
 
   // facing direction from yaw + pitch
   const yaw = player.mesh.rotation.y;
@@ -2029,10 +2082,11 @@ function animate() {
   // yaw from bank
   player.mesh.rotation.y -= player.bankAngle * yawRate * dt;
 
+  if (!player.landed) {
   // speed: dive accelerates, climb decelerates
   player.speed += player.facing.y * -2.5 * dt;
   player.speed -= 1.0 * dt; // air resistance
-  player.speed = clamp(player.speed, 0.5, 32);
+  player.speed = clamp(player.speed, 0, 32);  // allow full stop
 
   if (hoverMode) {
     // freeze all velocity, gentle bob
@@ -2068,18 +2122,20 @@ function animate() {
   // move
   _tv1.copy(player.vel).multiplyScalar(dt);
   player.mesh.position.add(_tv1);
-  } // end landed else (physics block)
   } // end hover else
+  } // end !landed block
 
-  // terrain collision — bird lands and perches on ground
+  // terrain collision — always clamp, strong damping on contact
   const groundY = terrainY(player.mesh.position.x, player.mesh.position.z);
-  const landThresh = groundY + 0.7;
-  if (player.mesh.position.y <= landThresh) {
-    player.mesh.position.y = landThresh;
-    player.vel.set(0, 0, 0);
-    player.speed = 0;
-    player.pitchAngle = lerp(player.pitchAngle, 0, 10 * dt);
-    player.bankAngle  = lerp(player.bankAngle,  0, 10 * dt);
+  const floorY = groundY + 0.7;
+  if (player.mesh.position.y <= floorY) {
+    player.mesh.position.y = floorY;
+    player.vel.x *= 0.05;
+    player.vel.z *= 0.05;
+    if (player.vel.y < 0) player.vel.y = 0;
+    player.speed *= 0.05;          // kill speed → kills lift next frame
+    player.pitchAngle = lerp(player.pitchAngle, 0, 12 * dt);
+    player.bankAngle  = lerp(player.bankAngle,  0, 12 * dt);
     player.landed = true;
   } else {
     player.landed = false;
