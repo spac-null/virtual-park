@@ -6,7 +6,7 @@
 <title>Virtual Park — Fly</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{overflow:hidden;background:#5599ff;font-family:'Courier New',monospace;color:#1a1a2e}
+body{overflow:hidden;background:#4488dd;font-family:'Courier New',monospace;color:#1a1a2e}
 canvas{display:block;cursor:none}
 
 .panel{position:absolute;background:rgba(255,255,255,0.88);border:1px solid rgba(0,100,200,0.2);border-radius:6px;box-shadow:0 2px 12px rgba(0,0,0,0.12);padding:8px 12px;font-size:12px;pointer-events:none;z-index:10;color:#1a1a2e}
@@ -74,7 +74,7 @@ canvas{display:block;cursor:none}
 }
 
 .name-label{position:absolute;z-index:8;pointer-events:none;font-family:'Courier New',monospace;font-size:10px;color:#1a1a2e;text-shadow:0 1px 2px rgba(255,255,255,0.8);white-space:nowrap;transform:translate(-50%,-100%)}
-#char-select{position:absolute;top:0;left:0;width:100%;height:100%;background:#5599ff;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:50;font-family:'Courier New',monospace}
+#char-select{position:absolute;top:0;left:0;width:100%;height:100%;background:#4488dd;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:50;font-family:'Courier New',monospace}
 .cs-title{font-size:38px;color:#1a1a2e;letter-spacing:6px;margin-bottom:6px;font-weight:bold}
 .cs-sub{font-size:12px;color:#555;letter-spacing:3px;text-transform:uppercase;margin-bottom:40px}
 .cs-row{display:flex;gap:28px}
@@ -124,10 +124,10 @@ canvas{display:block;cursor:none}
   <table>
     <tr><td>W / S</td><td>pitch up / down</td></tr>
     <tr><td>A / D</td><td>bank &amp; turn</td></tr>
-    <tr><td>SPACE</td><td>flap (altitude)</td></tr>
+    <tr><td>SPACE</td><td>flap (bird) / dash (duck)</td></tr>
+    <tr><td>E</td><td>egg bomb (bird) / trace (duck)</td></tr>
     <tr><td>R-drag</td><td>free look</td></tr>
     <tr><td>TAB</td><td>scoreboard</td></tr>
-    <tr><td>E</td><td>drop trace</td></tr>
     <tr><td>R</td><td>respawn (if stuck)</td></tr>
     <tr><td>?</td><td>this overlay</td></tr>
   </table>
@@ -146,12 +146,12 @@ canvas{display:block;cursor:none}
     <button class="cs-btn" id="btn-bird">
       <div class="cs-icon">~~^~~</div>
       <div class="cs-name">BIRD</div>
-      <div class="cs-desc">fly · collect gems<br>bank at nest · race</div>
+      <div class="cs-desc">FLY · COLLECT GEMS · DROP EGG BOMBS</div>
     </button>
     <button class="cs-btn" id="btn-duck">
       <div class="cs-icon">(^_^)</div>
       <div class="cs-name">DUCK</div>
-      <div class="cs-desc">walk · bazooka birds<br>drop bomb eggs · boom</div>
+      <div class="cs-desc">WALK · BAZOOKA SHOTS · DASH ATTACK</div>
     </button>
   </div>
 </div>
@@ -159,9 +159,6 @@ canvas{display:block;cursor:none}
 <script type="importmap">{"imports":{"three":"https://esm.sh/three@0.167.0","three/addons/":"https://esm.sh/three@0.167.0/examples/jsm/"}}</script>
 <script type="module">
 import * as THREE from 'three';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { RenderPixelatedPass } from 'three/addons/postprocessing/RenderPixelatedPass.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // ── CONFIG ──────────────────────────────────────────────
@@ -172,7 +169,7 @@ const CFG = {
   spawnY: 25,
   floorY: 6,
   ceilY: 60,
-  fogColor: 0x5599ff,
+  fogColor: 0x4488dd,
   fogDensity: 0.007,
   gemTypes: [
     { name: 'common', color: 0x00ffff, points: 1, count: 8, freq: 880,  respawn: 400  },
@@ -213,7 +210,7 @@ if (!playerName) {
 // ── RENDERER & SCENE ────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ antialias: false });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(1);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio * 0.6, 1.2));
 renderer.toneMapping = THREE.NoToneMapping;
 renderer.shadowMap.enabled = false;
 document.body.prepend(renderer.domElement);
@@ -225,13 +222,6 @@ scene.fog = new THREE.FogExp2(CFG.fogColor, CFG.fogDensity);
 const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.5, 200);
 camera.position.set(0, CFG.spawnY + 3, 12);
 
-// ── PIXELATED POST-PROCESSING ────────────────────────────
-const composer = new EffectComposer(renderer);
-composer.addPass(new RenderPass(scene, camera));
-const pixelPass = new RenderPixelatedPass(3, scene, camera);
-pixelPass.normalEdgeStrength = 0.35;
-pixelPass.depthEdgeStrength = 0.4;
-composer.addPass(pixelPass);
 
 // ── LIGHTING ────────────────────────────────────────────
 scene.add(new THREE.AmbientLight(0xd4eeff, 1.2));
@@ -449,12 +439,12 @@ scene.add(terrainMesh);
   const treeCount = 50;
   const trunkInst = new THREE.InstancedMesh(
     new THREE.CylinderGeometry(0.22, 0.38, 1, 6),
-    new THREE.MeshLambertMaterial({ color: 0x5c3a1e, flatShading: true }),
+    new THREE.MeshLambertMaterial({ color: 0x8B4513, flatShading: true }),
     treeCount
   );
   const canopyInst = new THREE.InstancedMesh(
     new THREE.ConeGeometry(1, 1, 7),
-    new THREE.MeshLambertMaterial({ color: 0x2d6a2d, vertexColors: false, flatShading: true }),
+    new THREE.MeshLambertMaterial({ color: 0x228822, emissive: 0x112211, vertexColors: false, flatShading: true }),
     treeCount
   );
   const _treeCol = new THREE.Color();
@@ -471,7 +461,7 @@ scene.add(terrainMesh);
     _instP.set(tx2, ty2 + th + ch * 0.45, tz2); _instS.set(cw, ch, cw);
     canopyInst.setMatrixAt(ti2, _instM4.compose(_instP, _instQ, _instS));
     // per-tree color variation: lighter/darker greens
-    _treeCol.setRGB(0.10 + rand(-0.03, 0.05), 0.34 + rand(-0.07, 0.12), 0.10 + rand(-0.03, 0.05));
+    _treeCol.setRGB(0.13 + rand(-0.03, 0.07), 0.53 + rand(-0.08, 0.12), 0.13 + rand(-0.03, 0.07));
     canopyInst.setColorAt(ti2, _treeCol);
   }
   trunkInst.instanceMatrix.needsUpdate = true;
@@ -657,7 +647,8 @@ window.addEventListener('keydown', e => {
   if (e.key === '?' || e.key === '/') {
     document.getElementById('controls-overlay').classList.toggle('visible');
   }
-  if ((e.code === 'Space') && playerRole === 'duck') { e.preventDefault(); initAudio(); dropEgg(); }
+  if ((e.code === 'Space') && playerRole === 'duck') { e.preventDefault(); initAudio(); duckDash(); }
+  if ((e.key === 'e' || e.key === 'E') && playerRole === 'bird' && !tracePrompt) { e.preventDefault(); initAudio(); dropEgg(); }
 });
 window.addEventListener('keyup', e => {
   keys[e.code] = false;
@@ -900,8 +891,24 @@ function fireBarooka() {
   playBump(); // reuse bump sound for muzzle
 }
 
+function duckDash() {
+  if (playerRole !== 'duck' || dashCooldown > 0) return;
+  dashCooldown = 1.2;
+  const dashDist = 14;
+  player.mesh.position.x -= Math.sin(duckYaw) * dashDist;
+  player.mesh.position.z -= Math.cos(duckYaw) * dashDist;
+  // clamp inside world
+  const dl = player.mesh.position.length();
+  if (dl > 82) player.mesh.position.multiplyScalar(82 / dl);
+  player.mesh.position.y = terrainY(player.mesh.position.x, player.mesh.position.z) + 0.88;
+  // dust burst
+  burstParticles(player.mesh.position.clone(), 0xddcc88);
+  showZoneFlash('DASH!', '#ffcc00');
+  playBump();
+}
+
 function dropEgg() {
-  if (playerRole !== 'duck' || eggCooldown > 0) return;
+  if (playerRole !== 'bird' || eggCooldown > 0) return;
   eggCooldown = 2.5;
   const em = new THREE.Mesh(
     new THREE.SphereGeometry(0.36, 8, 6),
@@ -1326,6 +1333,7 @@ let duckYaw = 0;
 let camShake = 0;
 let bazookaCooldown = 0;
 let eggCooldown = 0;
+let dashCooldown = 0;
 function sendMove() {
   if (!ws || ws.readyState !== 1) return;
   const now = performance.now();
@@ -1369,7 +1377,7 @@ function sendTrace(text) {
 
 let tracePrompt = false;
 window.addEventListener('keydown', e => {
-  if ((e.key === 'e' || e.key === 'E') && !tracePrompt) {
+  if ((e.key === 'e' || e.key === 'E') && !tracePrompt && playerRole !== 'bird') {
     tracePrompt = true;
     const t = prompt('Leave a trace:');
     if (t) sendTrace(t);
@@ -1754,6 +1762,7 @@ function animate() {
     }
     bazookaCooldown = Math.max(0, bazookaCooldown - dt);
     eggCooldown = Math.max(0, eggCooldown - dt);
+    dashCooldown = Math.max(0, dashCooldown - dt);
     // duck can still collect gems (radius 4.5 for ground reach)
     player.speed = 0; player.pitchAngle = 0; player.bankAngle = 0;
   } else {
@@ -1900,6 +1909,7 @@ function animate() {
   // Hit flash timer
   if (player.hitFlash > 0) { player.hitFlash -= dt; }
 
+  eggCooldown = Math.max(0, eggCooldown - dt);
   } // end bird-only block
 
   // ── BIRD/DUCK MESH ORIENTATION ───────────────────────
@@ -2091,7 +2101,8 @@ function animate() {
 
   // ── PARTICLES + WEAPONS ─────────────────────────────
   updateParticles(dt);
-  if (playerRole === 'duck') { updateProjectiles(dt); updateEggs(dt); }
+  if (playerRole === 'duck') { updateProjectiles(dt); }
+  updateEggs(dt);
   updateExplosionFX(dt);
 
   // ── NPC BIRDS (every 2 frames — 8×boids is cheap but no need at 60fps) ──
@@ -2135,7 +2146,7 @@ function animate() {
   updateOnlineHUD();
 
   // ── RENDER ──────────────────────────────────────────
-  composer.render();
+  renderer.render(scene, camera);
 }
 
 animate();
@@ -2145,8 +2156,6 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
-  composer.setSize(window.innerWidth, window.innerHeight);
-  pixelPass.setSize(window.innerWidth, window.innerHeight);
 });
 </script>
 </body>
