@@ -133,6 +133,10 @@ canvas{display:block;cursor:none}
 <script type="importmap">{"imports":{"three":"https://esm.sh/three@0.167.0","three/addons/":"https://esm.sh/three@0.167.0/examples/jsm/"}}</script>
 <script type="module">
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // ── CONFIG ──────────────────────────────────────────────
 const CFG = {
@@ -193,6 +197,17 @@ scene.fog = new THREE.FogExp2(CFG.fogColor, CFG.fogDensity);
 const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.5, 200);
 camera.position.set(0, CFG.spawnY + 3, 12);
 
+// ── BLOOM POST-PROCESSING ────────────────────────────────
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(Math.min(window.innerWidth, 1280), Math.min(window.innerHeight, 720)),
+  0.9,   // strength
+  0.4,   // radius
+  0.82   // threshold — only gems/sun/collisions bloom, not the sky
+);
+composer.addPass(bloomPass);
+
 // ── LIGHTING ────────────────────────────────────────────
 scene.add(new THREE.AmbientLight(0xd4eeff, 1.2));
 
@@ -208,6 +223,20 @@ dirLight.shadow.camera.bottom = -60;
 scene.add(dirLight);
 
 scene.add(new THREE.HemisphereLight(0x87ceeb, 0xd4c89a, 0.8));
+
+// ── SUN ─────────────────────────────────────────────────
+const sunMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(9, 16, 8),
+  new THREE.MeshBasicMaterial({ color: 0xfff8dd })
+);
+sunMesh.position.set(75, 80, -90);
+scene.add(sunMesh);
+const haloMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(15, 16, 8),
+  new THREE.MeshBasicMaterial({ color: 0xffeeaa, transparent: true, opacity: 0.18, side: THREE.BackSide })
+);
+haloMesh.position.copy(sunMesh.position);
+scene.add(haloMesh);
 
 // ── MATERIALS ───────────────────────────────────────────
 const rockMat = new THREE.MeshStandardMaterial({ color: 0xe8d5a3, metalness: 0.05, roughness: 0.85 });
@@ -313,18 +342,26 @@ for (let i = 0; i < CFG.driftCount; i++) {
   scene.add(m);
 }
 
-// Fluffy clouds (replace auroras) — white box clusters
-const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });
-for (let i = 0; i < 18; i++) {
-  const cx = rand(-80, 80), cy = rand(12, 52), cz = rand(-80, 80);
-  const nc = randInt(3, 7);
-  for (let j = 0; j < nc; j++) {
-    const w = rand(6, 18), h = rand(3, 7), d = rand(6, 16);
-    const cm = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), cloudMat);
-    cm.position.set(cx + rand(-8, 8), cy + rand(-2, 3), cz + rand(-8, 8));
-    scene.add(cm);
+// Clouds — single merged mesh (1 draw call instead of ~90)
+const cloudGeos = [];
+const _cloudM4 = new THREE.Matrix4();
+for (let ci = 0; ci < 22; ci++) {
+  const cx = rand(-82, 82), cy = rand(16, 56), cz = rand(-82, 82);
+  const nc = randInt(4, 8);
+  for (let cj = 0; cj < nc; cj++) {
+    const cw = rand(6, 22), ch = rand(3, 9), cd = rand(6, 20);
+    const cg = new THREE.BoxGeometry(cw, ch, cd);
+    _cloudM4.makeTranslation(cx + rand(-10, 10), cy + rand(-2, 4), cz + rand(-10, 10));
+    cg.applyMatrix4(_cloudM4);
+    cloudGeos.push(cg);
   }
 }
+const cloudMesh = new THREE.Mesh(
+  mergeGeometries(cloudGeos),
+  new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0 })
+);
+cloudMesh.receiveShadow = true;
+scene.add(cloudMesh);
 
 // Warm sun shafts at rock landmark positions
 for (let i = 0; i < CFG.pillarCount; i++) {
@@ -335,6 +372,43 @@ for (let i = 0; i < CFG.pillarCount; i++) {
     pl.position.set(p.x, 12 + j * 10, p.z);
     scene.add(pl);
   }
+}
+
+// ── GROUND ──────────────────────────────────────────────
+const terrainGeo = new THREE.PlaneGeometry(200, 200, 40, 40);
+terrainGeo.rotateX(-Math.PI / 2);
+const terrainPos = terrainGeo.attributes.position;
+for (let ti = 0; ti < terrainPos.count; ti++) {
+  const tx = terrainPos.getX(ti), tz = terrainPos.getZ(ti);
+  const ty = Math.sin(tx * 0.06) * 2.5 + Math.cos(tz * 0.05) * 2.0 + Math.sin(tx * 0.12 + tz * 0.09) * 1.2;
+  terrainPos.setY(ti, ty);
+}
+terrainGeo.computeVertexNormals();
+const terrainMesh = new THREE.Mesh(terrainGeo,
+  new THREE.MeshStandardMaterial({ color: 0x7ab648, roughness: 0.9, metalness: 0 })
+);
+terrainMesh.receiveShadow = true;
+scene.add(terrainMesh);
+
+const groundRockMat = new THREE.MeshStandardMaterial({ color: 0xc8b878, roughness: 0.9 });
+for (let gi = 0; gi < 30; gi++) {
+  const gx = rand(-80, 80), gz = rand(-80, 80);
+  const gy = Math.sin(gx * 0.06) * 2.5 + Math.cos(gz * 0.05) * 2.0 + Math.sin(gx * 0.12 + gz * 0.09) * 1.2;
+  const gr = new THREE.Mesh(new THREE.DodecahedronGeometry(rand(0.5, 1.8), 0), groundRockMat);
+  gr.position.set(gx, gy + 0.3, gz);
+  gr.rotation.set(rand(0, Math.PI), rand(0, Math.PI), rand(0, Math.PI));
+  scene.add(gr);
+}
+// Small ground trees
+for (let ti2 = 0; ti2 < 20; ti2++) {
+  const tx2 = rand(-75, 75), tz2 = rand(-75, 75);
+  const ty2 = Math.sin(tx2 * 0.06) * 2.5 + Math.cos(tz2 * 0.05) * 2.0 + Math.sin(tx2 * 0.12 + tz2 * 0.09) * 1.2;
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.35, 2.5, 6), new THREE.MeshStandardMaterial({ color: 0x5c3a1e }));
+  trunk.position.set(tx2, ty2 + 1.25, tz2);
+  scene.add(trunk);
+  const canopy = new THREE.Mesh(new THREE.ConeGeometry(2.2, 4.5, 7), new THREE.MeshStandardMaterial({ color: 0x2d6a2d }));
+  canopy.position.set(tx2, ty2 + 4.5, tz2);
+  scene.add(canopy);
 }
 
 // ── BIRD MESH ───────────────────────────────────────────
@@ -533,7 +607,7 @@ function spawnGem(typeIdx) {
     new THREE.OctahedronGeometry(0.7),
     new THREE.MeshStandardMaterial({
       color: t.color, metalness: 1.0, roughness: 0.0,
-      emissive: t.color, emissiveIntensity: 0.8
+      emissive: t.color, emissiveIntensity: 1.9
     })
   );
   let pos;
@@ -821,6 +895,9 @@ function connectWS() {
       myId = msg.id;
       player.color = parseColor(msg.color);
       updateBirdColor(player.mesh, player.color);
+      nestRingMat.color.set(player.color);
+      nestRingMat.emissive.set(player.color);
+      nestLight.color.set(player.color);
       if (msg.players) {
         for (const p of msg.players) {
           const rp = getRemotePlayer(p.id, p.name, parseColor(p.color));
@@ -956,6 +1033,9 @@ function triggerWin(winnerName) {
   setTimeout(() => {
     player.score = 0;
     player.gems = 0;
+    nestState.banked = 0;
+    nestState.carried = 0;
+    updateNestHUD();
     for (const id in remotePlayers) remotePlayers[id].score = 0;
     roundInProgress = true;
   }, 5000);
@@ -1115,6 +1195,59 @@ window.addEventListener('touchstart', onFirstInteraction);
 initGems();
 connectWS();
 
+// ── NEST WARS ───────────────────────────────────────────
+const NEST_WIN = 15;
+
+const nestPositions = [
+  new THREE.Vector3(8, 0, 8),
+  new THREE.Vector3(-8, 0, 8),
+  new THREE.Vector3(8, 0, -8),
+  new THREE.Vector3(-8, 0, -8),
+];
+const nestIdx = Math.abs(playerName.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % nestPositions.length;
+const playerNestPos = nestPositions[nestIdx].clone();
+{
+  const tnx = playerNestPos.x, tnz = playerNestPos.z;
+  playerNestPos.y = Math.sin(tnx * 0.06) * 2.5 + Math.cos(tnz * 0.05) * 2.0 + Math.sin(tnx * 0.12 + tnz * 0.09) * 1.2 + 0.3;
+}
+
+const nestGroup = new THREE.Group();
+const nestRingGeo = new THREE.TorusGeometry(2.2, 0.35, 8, 32);
+const nestRingMat = new THREE.MeshStandardMaterial({ color: 0xc8963c, roughness: 0.7, emissive: 0xc8963c, emissiveIntensity: 0.3 });
+nestGroup.add(new THREE.Mesh(nestRingGeo, nestRingMat));
+const nestFloorGeo = new THREE.CylinderGeometry(2.0, 2.0, 0.15, 32);
+const nestFloorMat = new THREE.MeshStandardMaterial({ color: 0xa07030, roughness: 0.8 });
+nestGroup.add(new THREE.Mesh(nestFloorGeo, nestFloorMat));
+nestGroup.position.copy(playerNestPos);
+scene.add(nestGroup);
+
+const nestLight = new THREE.PointLight(0xffaa44, 3, 12);
+nestLight.position.copy(playerNestPos);
+nestLight.position.y += 1;
+scene.add(nestLight);
+
+const nestState = { banked: 0, carried: 0 };
+
+const orbitGems = [];
+for (let oi = 0; oi < 8; oi++) {
+  const og = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.4),
+    new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0xffd700, emissiveIntensity: 1.5, metalness: 1, roughness: 0 })
+  );
+  og.visible = false;
+  scene.add(og);
+  orbitGems.push(og);
+}
+
+const nestHudEl = document.createElement('div');
+nestHudEl.style.cssText = 'position:absolute;bottom:110px;left:14px;z-index:10;pointer-events:none;font-family:"Courier New",monospace;font-size:13px;color:#1a1a2e;background:rgba(255,255,255,0.88);border:1px solid rgba(0,100,200,0.2);border-radius:6px;padding:8px 12px;';
+nestHudEl.innerHTML = 'nest: <b>0</b> / ' + NEST_WIN + '<br>carrying: <b>0</b>';
+document.body.appendChild(nestHudEl);
+
+function updateNestHUD() {
+  nestHudEl.innerHTML = 'nest: <b>' + nestState.banked + '</b> / ' + NEST_WIN + '<br>carrying: <b>' + nestState.carried + '</b>';
+}
+
 // ── GAME LOOP ───────────────────────────────────────────
 let _frameCount = 0;
 function animate() {
@@ -1226,7 +1359,30 @@ function animate() {
       _tv1.normalize().multiplyScalar(push);
       player.vel.add(_tv1);
       // Both birds flash white briefly
-      if (!player.hitFlash) { player.hitFlash = 0.3; showZoneFlash('💥 bump!', '#ff6600'); }
+      if (!player.hitFlash) {
+        player.hitFlash = 0.3;
+        const dropped = nestState.carried;
+        if (dropped > 0) {
+          nestState.carried = 0;
+          updateNestHUD();
+          showZoneFlash('-' + dropped + ' dropped!', '#ff3300');
+          for (let di = 0; di < Math.min(dropped, 3); di++) {
+            setTimeout(() => {
+              const dp = player.mesh.position.clone().add(new THREE.Vector3(rand(-5,5), rand(0,3), rand(-5,5)));
+              const dg = gems.find(g => !g.active);
+              if (dg) {
+                dg.mesh.position.copy(dp);
+                dg.light.position.copy(dp);
+                dg.active = true;
+                dg.mesh.visible = true;
+                dg.light.visible = true;
+              }
+            }, di * 150);
+          }
+        } else {
+          showZoneFlash('bump!', '#ff6600');
+        }
+      }
     }
   }
   // vs NPC birds
@@ -1280,6 +1436,22 @@ function animate() {
     ghostMeshes[i].position.copy(ghostPositions[i]);
   }
 
+  // ── ORBIT GEMS VISUAL ───────────────────────────────
+  for (let oi = 0; oi < orbitGems.length; oi++) {
+    const show = oi < nestState.carried;
+    orbitGems[oi].visible = show;
+    if (show) {
+      const angle = time * 2.5 + (oi / orbitGems.length) * Math.PI * 2;
+      const r = 1.8;
+      orbitGems[oi].position.set(
+        player.mesh.position.x + Math.cos(angle) * r,
+        player.mesh.position.y + Math.sin(time * 3 + oi) * 0.3 + 0.5,
+        player.mesh.position.z + Math.sin(angle) * r
+      );
+      orbitGems[oi].rotation.y += dt * 4;
+    }
+  }
+
   // ── CAMERA ──────────────────────────────────────────
   // Lag camera yaw behind bird — prevents shake on sharp turns
   let dyaw = player.mesh.rotation.y - camState.yaw;
@@ -1323,7 +1495,8 @@ function animate() {
     const dist = player.mesh.position.distanceTo(g.mesh.position);
     if (dist < 3.0) {
       const gt = CFG.gemTypes[g.type];
-      player.score += gt.points;
+      nestState.carried += gt.points;
+      player.score = nestState.banked;
       player.gems++;
       burstParticles(g.mesh.position.clone(), gt.color);
       playGemCollect(gt.freq);
@@ -1379,6 +1552,20 @@ function animate() {
     }
   }
 
+  // ── NEST LANDING ────────────────────────────────────
+  const nestDist = player.mesh.position.distanceTo(nestGroup.position);
+  const nearGround = player.mesh.position.y < playerNestPos.y + 4;
+  if (nestDist < 4.5 && nearGround && nestState.carried > 0) {
+    nestState.banked += nestState.carried;
+    player.score = nestState.banked;
+    showZoneFlash('+' + nestState.carried + ' banked!', '#22cc44');
+    playGemCollect(1108);
+    nestState.carried = 0;
+    updateNestHUD();
+    if (nestState.banked >= NEST_WIN) triggerWin(playerName);
+  }
+  updateNestHUD();
+
   // ── PARTICLES ───────────────────────────────────────
   updateParticles(dt);
 
@@ -1394,6 +1581,9 @@ function animate() {
     ds.mesh.position.y += Math.sin(time * ds.speed + ds.phase) * 0.002;
   }
 
+  // ── CLOUD DRIFT ─────────────────────────────────────
+  cloudMesh.position.x = Math.sin(time * 0.018) * 4;
+  cloudMesh.position.z = Math.cos(time * 0.012) * 3;
 
   // ── TRACES DECAY ────────────────────────────────────
   for (let i = traces.length - 1; i >= 0; i--) {
@@ -1416,7 +1606,7 @@ function animate() {
   updateOnlineHUD();
 
   // ── RENDER ──────────────────────────────────────────
-  renderer.render(scene, camera);
+  composer.render();
 }
 
 animate();
@@ -1426,6 +1616,8 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
+  bloomPass.setSize(window.innerWidth, window.innerHeight);
 });
 </script>
 </body>
