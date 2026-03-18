@@ -16,13 +16,19 @@ canvas{display:block;cursor:none}
 #hud-score .rank{color:#555;font-size:11px;margin-top:2px}
 #hud-score .gem-count{color:#777;font-size:10px;margin-top:1px}
 
-#hud-online{top:14px;right:14px;display:flex;align-items:center;gap:6px}
-#hud-online .dot{width:7px;height:7px;border-radius:50%;display:inline-block}
-#hud-online .dot.on{background:#22aa55;box-shadow:0 0 6px rgba(34,170,85,0.5);animation:pulse 2s infinite}
-#hud-online .dot.off{background:#bbb}
-#hud-online .player-squares{display:flex;gap:3px;margin-left:4px}
-#hud-online .psq{width:7px;height:7px;border-radius:1px;display:inline-block}
-#hud-online .name{color:#0055cc;margin-left:4px;font-size:11px}
+#hud-online{top:14px;right:14px;background:none;border:none;box-shadow:none;padding:0;display:flex;flex-direction:column;gap:0;align-items:flex-end;font-family:'Courier New',monospace;font-size:11px;pointer-events:none;z-index:10;text-align:right}
+#hud-online .online-header{color:#fff;font-size:10px;letter-spacing:2px;text-transform:uppercase;text-shadow:1px 1px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000;margin-bottom:3px;opacity:0.7}
+#hud-online .dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:4px;vertical-align:middle}
+#hud-online .dot.on{background:#44ff88;box-shadow:0 0 4px #44ff88;animation:pulse 2s infinite}
+#hud-online .dot.off{background:#888}
+#hud-online .player-list{display:flex;flex-direction:column;gap:1px;align-items:flex-end}
+#hud-online .pl-row{display:flex;align-items:center;gap:5px;white-space:nowrap}
+#hud-online .pl-color{width:8px;height:8px;border-radius:1px;flex-shrink:0}
+#hud-online .pl-name{color:#fff;font-size:10px;letter-spacing:0.5px;text-shadow:1px 1px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000;text-transform:uppercase}
+#hud-online .pl-name.pl-me{color:#ffee44}
+#hud-online .status{display:none}
+#hud-online .name{display:none}
+#hud-online .player-squares{display:none}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
 
 #alt-bar{position:absolute;right:14px;top:50%;transform:translateY(-50%);width:6px;height:180px;z-index:10;pointer-events:none}
@@ -96,11 +102,9 @@ canvas{display:block;cursor:none}
   <div class="gem-count">0 gems</div>
 </div>
 
-<div id="hud-online" class="panel">
-  <span class="dot off"></span>
-  <span class="status">offline</span>
-  <span class="player-squares"></span>
-  <span class="name"></span>
+<div id="hud-online">
+  <div class="online-header"><span class="dot off"></span><span class="status">OFFLINE</span></div>
+  <div class="player-list"><span class="player-squares"></span></div>
 </div>
 
 <div id="alt-bar">
@@ -245,7 +249,7 @@ if (!playerName) {
   playerName = pick(adjectives) + '-' + pick(nouns);
   localStorage.setItem('vp_playerName', playerName);
 }
-{ const inp = document.getElementById('cs-name-input'); if (inp) inp.value = playerName; }
+{ const inp = document.getElementById('cs-name-input'); if (inp) { inp.placeholder = playerName; inp.value = ''; } }
 
 // ── RENDERER & SCENE ────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -1748,15 +1752,17 @@ function updateOnlineHUD() {
   if (count === _onlineHudCount && wsConnected === _onlineHudConnected) return;
   _onlineHudCount = count; _onlineHudConnected = wsConnected;
   onlineDot.className = 'dot ' + (wsConnected ? 'on' : 'off');
-  onlineStatus.textContent = wsConnected ? count + ' online' : 'offline';
-  onlineName.textContent = '';
-  let sq = '<span class="psq" style="background:#' + player.color.toString(16).padStart(6, '0') + '" title="' + playerName + ' (you)"></span> <span style="font-size:10px;opacity:0.8;">' + playerName + ' (you)</span><br>';
+  onlineStatus.textContent = wsConnected ? count + ' ONLINE' : 'OFFLINE';
+  const playerList = document.querySelector('#hud-online .player-list');
+  if (!playerList) return;
+  const myHex = player.color.toString(16).padStart(6, '0');
+  let rows = `<div class="pl-row"><div class="pl-color" style="background:#${myHex}"></div><span class="pl-name pl-me">${playerName}</span></div>`;
   for (const id in remotePlayers) {
-    const c = remotePlayers[id].color || 0x888888;
-    const rn = remotePlayers[id].name || '?';
-    sq += '<span class="psq" style="background:#' + c.toString(16).padStart(6, '0') + '"></span> <span style="font-size:10px;opacity:0.8;">' + rn + '</span><br>';
+    const c = (remotePlayers[id].color || 0x888888).toString(16).padStart(6, '0');
+    const rn = (remotePlayers[id].name || '?').toUpperCase();
+    rows += `<div class="pl-row"><div class="pl-color" style="background:#${c}"></div><span class="pl-name">${rn}</span></div>`;
   }
-  onlineSquares.innerHTML = sq;
+  playerList.innerHTML = rows;
 }
 
 function updateHUD(dt) {
@@ -2083,28 +2089,27 @@ function animate() {
   // ── FLIGHT PHYSICS (bird) / GROUND MOVEMENT (duck) ──
   if (playerRole === 'duck') {
     // crab ground movement — Q/E or mouse drag to turn, A/D strafe sideways (natural crab direction)
-    if (keys['KeyQ'] || keys['ArrowLeft'])  duckYaw += 2.5 * dt;
+    // joystick X → turn crab (mobile); keyboard Q/E → turn
+    if (keys['KeyQ'] || keys['ArrowLeft']) duckYaw += 2.5 * dt;
     if (keys['KeyE'] || keys['ArrowRight']) duckYaw -= 2.5 * dt;
-    const duckSpd = 14;   // same as bird top speed
-    const duckFwdSpd = duckSpd * 0.8;  // fwd slightly slower but still fast
+    if (Math.abs(joyX) > 0.15) duckYaw -= joyX * 3.0 * dt;
+    const duckSpd = 14;
+    const duckFwdSpd = duckSpd * 0.8;
     let strafeDir = 0;
     let duckMoving = false;
-    // A/D → strafe left/right (primary crab movement) + joystick X
-    const joyStrafe = Math.abs(joyX) > 0.2 ? joyX : 0;
     const joyFwd = Math.abs(joyY) > 0.2 ? joyY : 0;
-    if (keys['KeyA'] || joyStrafe < -0.2) {
-      const mag = keys['KeyA'] ? 1 : Math.abs(joyStrafe);
-      player.mesh.position.x -= Math.cos(duckYaw) * duckSpd * dt * mag;
-      player.mesh.position.z += Math.sin(duckYaw) * duckSpd * dt * mag;
+    // A/D → strafe left/right (keyboard only)
+    if (keys['KeyA']) {
+      player.mesh.position.x -= Math.cos(duckYaw) * duckSpd * dt;
+      player.mesh.position.z += Math.sin(duckYaw) * duckSpd * dt;
       duckMoving = true; strafeDir = -1;
     }
-    if (keys['KeyD'] || joyStrafe > 0.2) {
-      const mag = keys['KeyD'] ? 1 : joyStrafe;
-      player.mesh.position.x += Math.cos(duckYaw) * duckSpd * dt * mag;
-      player.mesh.position.z -= Math.sin(duckYaw) * duckSpd * dt * mag;
+    if (keys['KeyD']) {
+      player.mesh.position.x += Math.cos(duckYaw) * duckSpd * dt;
+      player.mesh.position.z -= Math.sin(duckYaw) * duckSpd * dt;
       duckMoving = true; strafeDir = 1;
     }
-    // W/S → forward/backward (slower, secondary) + joystick Y
+    // W/S / joystick Y → forward/backward
     if (keys['KeyW'] || keys['ArrowUp'] || joyFwd < -0.2) {
       const mag = (keys['KeyW'] || keys['ArrowUp']) ? 1 : Math.abs(joyFwd);
       player.mesh.position.x -= Math.sin(duckYaw) * duckFwdSpd * dt * mag;
@@ -2159,11 +2164,15 @@ function animate() {
   if (keys['KeyS'] || keys['ArrowDown'] || joyY > 0.2)
     player.pitchAngle += pitchRate * dt * (joyY > 0.2 ? joyY : 1);
 
-  // bank
-  if (keys['KeyA'] || keys['ArrowLeft'] || joyX < -0.2)
+  // bank + direct yaw from joystick (more responsive on mobile)
+  if (keys['KeyA'] || keys['ArrowLeft'] || joyX < -0.2) {
     player.bankAngle -= rollRate * dt * (joyX < -0.2 ? Math.abs(joyX) : 1);
-  if (keys['KeyD'] || keys['ArrowRight'] || joyX > 0.2)
+    if (joyX < -0.2) player.mesh.rotation.y += Math.abs(joyX) * 1.8 * dt;
+  }
+  if (keys['KeyD'] || keys['ArrowRight'] || joyX > 0.2) {
     player.bankAngle += rollRate * dt * (joyX > 0.2 ? joyX : 1);
+    if (joyX > 0.2) player.mesh.rotation.y -= joyX * 1.8 * dt;
+  }
 
   player.pitchAngle = clamp(player.pitchAngle, -1.0, 1.0);  // steeper dives
   player.bankAngle = lerp(player.bankAngle, 0, 3.5 * dt);   // quicker self-level
