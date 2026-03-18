@@ -801,31 +801,29 @@ if (joyBase) {
   });
 }
 let mobileFireBaz = false, mobileFireRocket = false;
-const flapBtn = document.getElementById('mobile-flap');
-if (flapBtn) {
-  flapBtn.addEventListener('touchstart', e => { e.preventDefault(); mobileFlap = true; });
-  flapBtn.addEventListener('touchend', () => { mobileFlap = false; });
+function addTouchBtn(id, onDown, onUp) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  let tid = null;
+  el.addEventListener('touchstart', e => {
+    e.preventDefault(); e.stopPropagation();
+    if (tid !== null) return;
+    tid = e.changedTouches[0].identifier;
+    if (onDown) onDown();
+  }, { passive: false });
+  el.addEventListener('touchend', e => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === tid) { tid = null; if (onUp) onUp(); break; }
+    }
+  });
+  el.addEventListener('touchcancel', () => { tid = null; if (onUp) onUp(); });
 }
-const eggBtn = document.getElementById('mobile-egg');
-if (eggBtn) {
-  eggBtn.addEventListener('touchstart', e => { e.preventDefault(); initAudio(); dropEgg(); });
-}
-const hoverBtn = document.getElementById('mobile-hover');
-if (hoverBtn) {
-  hoverBtn.addEventListener('touchstart', e => { e.preventDefault(); hoverMode = !hoverMode; hoverBtn.style.background = hoverMode ? 'rgba(120,120,255,0.95)' : 'rgba(80,80,200,0.75)'; });
-}
-const jumpBtn = document.getElementById('mobile-jump');
-if (jumpBtn) {
-  jumpBtn.addEventListener('touchstart', e => { e.preventDefault(); initAudio(); if (playerRole === 'duck' && crabJumpVel === 0) { crabJumpVel = 9; player.mesh.position.y += 0.3; playFlap(); } });
-}
-const fireBtn = document.getElementById('mobile-fire');
-if (fireBtn) {
-  fireBtn.addEventListener('touchstart', e => { e.preventDefault(); initAudio(); fireBarooka(); });
-}
-const rocketBtn = document.getElementById('mobile-rocket');
-if (rocketBtn) {
-  rocketBtn.addEventListener('touchstart', e => { e.preventDefault(); initAudio(); fireRocket(); });
-}
+addTouchBtn('mobile-flap', () => { mobileFlap = true; }, () => { mobileFlap = false; });
+addTouchBtn('mobile-egg',  () => { initAudio(); dropEgg(); });
+addTouchBtn('mobile-hover',() => { hoverMode = !hoverMode; });
+addTouchBtn('mobile-jump', () => { initAudio(); if (playerRole === 'duck' && crabJumpVel === 0) { crabJumpVel = 9; player.mesh.position.y += 0.3; playFlap(); } });
+addTouchBtn('mobile-fire', () => { initAudio(); fireBarooka(); });
+addTouchBtn('mobile-rocket',() => { initAudio(); fireRocket(); });
 const chatBtn = document.getElementById('mobile-chat');
 if (chatBtn) {
   chatBtn.addEventListener('touchstart', e => {
@@ -1505,6 +1503,7 @@ function connectWS() {
       rp.targetPos.set(msg.x || 0, msg.y || CFG.spawnY, msg.z || 0);
       rp.targetRotY = msg.rotY || 0;
       rp.score = msg.score || 0;
+      rp.speed = msg.speed || 0;
       if (msg.name) rp.name = msg.name;
     } else if (msg.type === 'leave') {
       removeRemotePlayer(msg.id);
@@ -1525,6 +1524,7 @@ let bazookaCooldown = 0;
 let eggCooldown = 0;
 let dashCooldown = 0;
 let crabJumpVel = 0;
+let divebombCooldown = 0;
 
 let escMenuOpen = false;
 
@@ -1572,7 +1572,8 @@ function sendMove() {
     rotY: +player.mesh.rotation.y.toFixed(3),
     name: playerName,
     score: player.score,
-    role: playerRole || 'bird'
+    role: playerRole || 'bird',
+    speed: +(player.speed.toFixed(1))
   }));
 }
 
@@ -1699,7 +1700,7 @@ function addTrace(x, z, y, text, color, name) {
   const tex = new THREE.CanvasTexture(canvas);
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
   const aspect = canvas.width / canvas.height;
-  sprite.scale.set(aspect * 1.1, 1.1, 1);
+  sprite.scale.set(aspect * 0.9, 0.9, 1);
   sprite.position.set(0, 2.2, 0);  // raised above terrain/rocks
   g.add(sprite);
 
@@ -2430,6 +2431,24 @@ function animate() {
       npcBirds[i].vel.copy(_tv1).multiplyScalar(-3);
     }
   }
+  // dive-bomb — fast low-altitude descent hits crabs
+  divebombCooldown = Math.max(0, divebombCooldown - dt);
+  if (!player.landed && player.vel.y < -5 && player.speed > 12 && player.mesh.position.y < 14 && divebombCooldown <= 0) {
+    for (const id in remotePlayers) {
+      if (remotePlayers[id].role !== 'duck') continue;
+      if (player.mesh.position.distanceTo(remotePlayers[id].mesh.position) < 5.5) {
+        player.score += 2;
+        showZoneFlash('🦅 DIVE-BOMB! +2', '#ffaa00');
+        if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'hit', targetId: id, fromName: playerName }));
+        divebombCooldown = 3.0;
+        player.vel.y = 10; player.speed = Math.max(player.speed, 10);
+        explode(player.mesh.position.clone(), 0.8);
+        playBump();
+        break;
+      }
+    }
+  }
+
   // Hit flash timer
   if (player.hitFlash > 0) { player.hitFlash -= dt; }
 
