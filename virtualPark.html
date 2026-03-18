@@ -126,7 +126,8 @@ canvas{display:block;cursor:none}
     <tr><td>A / D</td><td>bank &amp; turn (bird) / strafe (crab)</td></tr>
     <tr><td>Q / E</td><td>turn crab left / right</td></tr>
     <tr><td>SPACE</td><td>flap (bird) / rocket blast (crab)</td></tr>
-    <tr><td>E</td><td>egg bomb (bird) / trace (crab)</td></tr>
+    <tr><td>E</td><td>egg bomb (bird only)</td></tr>
+    <tr><td>T</td><td>drop message (all)</td></tr>
     <tr><td>H</td><td>hover (freeze in air)</td></tr>
     <tr><td>M</td><td>message log</td></tr>
     <tr><td>R-drag</td><td>free look</td></tr>
@@ -1531,9 +1532,9 @@ function sendTrace(text) {
 
 let tracePrompt = false;
 window.addEventListener('keydown', e => {
-  if ((e.key === 'e' || e.key === 'E') && !tracePrompt && playerRole !== 'bird') {
+  if ((e.key === 't' || e.key === 'T') && !tracePrompt) {
     tracePrompt = true;
-    const t = prompt('Leave a trace:');
+    const t = prompt('Drop a message:');
     if (t) sendTrace(t);
     tracePrompt = false;
   }
