@@ -1485,31 +1485,50 @@ function addTrace(x, z, y, text, color) {
 
   // Canvas text sprite — floating label above the orb
   const canvas = document.createElement('canvas');
-  canvas.width = 512; canvas.height = 80;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = 'rgba(0,0,0,0.65)';
-  ctx.roundRect(4, 4, canvas.width - 8, canvas.height - 8, 10);
-  ctx.fill();
-  ctx.font = 'bold 22px monospace';
-  ctx.fillStyle = color || '#ffffff';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  // word-wrap at 28 chars
+  // word-wrap at 22 chars
   const words = text.split(' ');
   let line = '', lines = [];
   for (const w of words) {
-    if ((line + w).length > 28) { lines.push(line.trim()); line = ''; }
+    if ((line + w).length > 22) { lines.push(line.trim()); line = ''; }
     line += w + ' ';
   }
   if (line.trim()) lines.push(line.trim());
-  const lineH = 26;
-  const startY = canvas.height/2 - ((lines.length-1) * lineH) / 2;
-  lines.forEach((l, i) => ctx.fillText(l, canvas.width/2, startY + i * lineH));
+
+  const lineH = 44;
+  canvas.width = 512;
+  canvas.height = Math.max(90, lines.length * lineH + 28);
+  const ctx = canvas.getContext('2d');
+
+  // bright white pill background
+  ctx.fillStyle = 'rgba(255,255,255,0.96)';
+  ctx.beginPath();
+  ctx.roundRect(0, 0, canvas.width, canvas.height, 18);
+  ctx.fill();
+
+  // colored top bar
+  ctx.fillStyle = color || '#00b3ff';
+  ctx.beginPath();
+  ctx.roundRect(0, 0, canvas.width, 14, [18, 18, 0, 0]);
+  ctx.fill();
+
+  // text — large black, with sender color outline
+  ctx.font = 'bold 36px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.strokeStyle = color || '#0055cc';
+  ctx.lineWidth = 5;
+  const startY = (canvas.height + 14) / 2 - ((lines.length - 1) * lineH) / 2;
+  lines.forEach((l, i) => {
+    ctx.strokeText(l, canvas.width / 2, startY + i * lineH);
+    ctx.fillStyle = '#111111';
+    ctx.fillText(l, canvas.width / 2, startY + i * lineH);
+  });
 
   const tex = new THREE.CanvasTexture(canvas);
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true }));
-  sprite.scale.set(4, 0.65, 1);
-  sprite.position.set(0, 1.2, 0);  // above the orb
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  const aspect = canvas.width / canvas.height;
+  sprite.scale.set(5 * aspect / 2, 2.5, 1);
+  sprite.position.set(0, 2.2, 0);  // raised above terrain/rocks
   g.add(sprite);
 
   // Gentle bob animation data
