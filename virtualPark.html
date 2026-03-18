@@ -6,8 +6,9 @@
 <title>Virtual Park — Fly</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{overflow:hidden;background:#4488dd;font-family:'Courier New',monospace;color:#1a1a2e}
-canvas{display:block;cursor:none}
+html,body{width:100%;height:100%;overflow:hidden;background:#4488dd;font-family:'Courier New',monospace;color:#1a1a2e}
+body{position:fixed;top:0;left:0}
+canvas{display:block;cursor:none;position:fixed;top:0;left:0}
 
 .panel{position:absolute;background:rgba(255,255,255,0.88);border:1px solid rgba(0,100,200,0.2);border-radius:6px;box-shadow:0 2px 12px rgba(0,0,0,0.12);padding:8px 12px;font-size:12px;pointer-events:none;z-index:10;color:#1a1a2e}
 
@@ -2632,10 +2633,21 @@ function animate() {
 animate();
 
 // ── RESIZE ──────────────────────────────────────────────
+// Lock viewport size — on mobile, ignore height-only changes (URL bar show/hide)
+const _initW = window.innerWidth, _initH = window.innerHeight;
+let _lockedH = _initH;
+function getH() { return (navigator.maxTouchPoints > 0) ? _lockedH : window.innerHeight; }
+renderer.setSize(_initW, _lockedH);
+camera.aspect = _initW / _lockedH;
+camera.updateProjectionMatrix();
 window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
+  const w = window.innerWidth, h = window.innerHeight;
+  // on touch devices only update if width changed (rotation) or height grew (URL bar hid → actual resize)
+  if (navigator.maxTouchPoints > 0 && w === _initW && h < _lockedH) return;
+  if (navigator.maxTouchPoints > 0 && w !== _initW) _lockedH = h; // rotation — update locked height
+  camera.aspect = w / getH();
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setSize(w, getH());
 });
 </script>
 </body>
