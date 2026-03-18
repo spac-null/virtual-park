@@ -6,7 +6,7 @@
 <title>Virtual Park — Fly</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{overflow:hidden;background:#87ceeb;font-family:'Courier New',monospace;color:#1a1a2e}
+body{overflow:hidden;background:#5599ff;font-family:'Courier New',monospace;color:#1a1a2e}
 canvas{display:block;cursor:none}
 
 .panel{position:absolute;background:rgba(255,255,255,0.88);border:1px solid rgba(0,100,200,0.2);border-radius:6px;box-shadow:0 2px 12px rgba(0,0,0,0.12);padding:8px 12px;font-size:12px;pointer-events:none;z-index:10;color:#1a1a2e}
@@ -74,7 +74,7 @@ canvas{display:block;cursor:none}
 }
 
 .name-label{position:absolute;z-index:8;pointer-events:none;font-family:'Courier New',monospace;font-size:10px;color:#1a1a2e;text-shadow:0 1px 2px rgba(255,255,255,0.8);white-space:nowrap;transform:translate(-50%,-100%)}
-#char-select{position:absolute;top:0;left:0;width:100%;height:100%;background:#87ceeb;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:50;font-family:'Courier New',monospace}
+#char-select{position:absolute;top:0;left:0;width:100%;height:100%;background:#5599ff;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:50;font-family:'Courier New',monospace}
 .cs-title{font-size:38px;color:#1a1a2e;letter-spacing:6px;margin-bottom:6px;font-weight:bold}
 .cs-sub{font-size:12px;color:#555;letter-spacing:3px;text-transform:uppercase;margin-bottom:40px}
 .cs-row{display:flex;gap:28px}
@@ -161,7 +161,7 @@ canvas{display:block;cursor:none}
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { RenderPixelatedPass } from 'three/addons/postprocessing/RenderPixelatedPass.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // ── CONFIG ──────────────────────────────────────────────
@@ -172,7 +172,7 @@ const CFG = {
   spawnY: 25,
   floorY: 6,
   ceilY: 60,
-  fogColor: 0x87ceeb,
+  fogColor: 0x5599ff,
   fogDensity: 0.007,
   gemTypes: [
     { name: 'common', color: 0x00ffff, points: 1, count: 8, freq: 880,  respawn: 400  },
@@ -211,11 +211,10 @@ if (!playerName) {
 }
 
 // ── RENDERER & SCENE ────────────────────────────────────
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ antialias: false });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
+renderer.setPixelRatio(1);
+renderer.toneMapping = THREE.NoToneMapping;
 renderer.shadowMap.enabled = false;
 document.body.prepend(renderer.domElement);
 
@@ -226,16 +225,13 @@ scene.fog = new THREE.FogExp2(CFG.fogColor, CFG.fogDensity);
 const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.5, 200);
 camera.position.set(0, CFG.spawnY + 3, 12);
 
-// ── BLOOM POST-PROCESSING ────────────────────────────────
+// ── PIXELATED POST-PROCESSING ────────────────────────────
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloomPass = new UnrealBloomPass(
-  new THREE.Vector2(Math.min(window.innerWidth, 1280), Math.min(window.innerHeight, 720)),
-  0.9,   // strength
-  0.4,   // radius
-  0.82   // threshold — only gems/sun/collisions bloom, not the sky
-);
-composer.addPass(bloomPass);
+const pixelPass = new RenderPixelatedPass(3, scene, camera);
+pixelPass.normalEdgeStrength = 0.35;
+pixelPass.depthEdgeStrength = 0.4;
+composer.addPass(pixelPass);
 
 // ── LIGHTING ────────────────────────────────────────────
 scene.add(new THREE.AmbientLight(0xd4eeff, 1.2));
@@ -268,7 +264,7 @@ haloMesh.position.copy(sunMesh.position);
 scene.add(haloMesh);
 
 // ── MATERIALS ───────────────────────────────────────────
-const rockMat = new THREE.MeshStandardMaterial({ color: 0xe8d5a3, metalness: 0.05, roughness: 0.85 });
+const rockMat = new THREE.MeshLambertMaterial({ color: 0xddaa44, flatShading: true });
 const edgeMat = new THREE.LineBasicMaterial({ color: 0xb89a6a, opacity: 0.7, transparent: true });
 
 // ── WORLD BUILDER ───────────────────────────────────────
@@ -369,7 +365,7 @@ const _instS = new THREE.Vector3();
 const driftStones = [];
 const driftInst = new THREE.InstancedMesh(
   new THREE.SphereGeometry(1, 6, 5),
-  new THREE.MeshLambertMaterial({ color: 0xd4c090 }),
+  new THREE.MeshLambertMaterial({ color: 0xd4c090, flatShading: true }),
   CFG.driftCount
 );
 for (let i = 0; i < CFG.driftCount; i++) {
@@ -398,7 +394,7 @@ for (let ci = 0; ci < 22; ci++) {
 }
 const cloudMesh = new THREE.Mesh(
   mergeGeometries(cloudGeos),
-  new THREE.MeshLambertMaterial({ color: 0xffffff })
+  new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true })
 );
 cloudMesh.receiveShadow = true;
 scene.add(cloudMesh);
@@ -423,7 +419,7 @@ for (let ti = 0; ti < terrainPos.count; ti++) {
 }
 terrainGeo.computeVertexNormals();
 const terrainMesh = new THREE.Mesh(terrainGeo,
-  new THREE.MeshLambertMaterial({ color: 0x7ab648 })
+  new THREE.MeshLambertMaterial({ color: 0x33bb33, flatShading: true })
 );
 scene.add(terrainMesh);
 
@@ -431,7 +427,7 @@ scene.add(terrainMesh);
 {
   const groundRockInst = new THREE.InstancedMesh(
     new THREE.DodecahedronGeometry(1, 1),
-    new THREE.MeshLambertMaterial({ color: 0xc8b878 }),
+    new THREE.MeshLambertMaterial({ color: 0xddaa44, flatShading: true }),
     80
   );
   for (let gi = 0; gi < 80; gi++) {
@@ -453,12 +449,12 @@ scene.add(terrainMesh);
   const treeCount = 50;
   const trunkInst = new THREE.InstancedMesh(
     new THREE.CylinderGeometry(0.22, 0.38, 1, 6),
-    new THREE.MeshLambertMaterial({ color: 0x5c3a1e }),
+    new THREE.MeshLambertMaterial({ color: 0x5c3a1e, flatShading: true }),
     treeCount
   );
   const canopyInst = new THREE.InstancedMesh(
     new THREE.ConeGeometry(1, 1, 7),
-    new THREE.MeshLambertMaterial({ color: 0x2d6a2d, vertexColors: false }),
+    new THREE.MeshLambertMaterial({ color: 0x2d6a2d, vertexColors: false, flatShading: true }),
     treeCount
   );
   const _treeCol = new THREE.Color();
@@ -485,57 +481,57 @@ scene.add(terrainMesh);
   scene.add(canopyInst);
 }
 
-// ── BIRD MESH ───────────────────────────────────────────
+// ── BIRD MESH (N64 chunky style) ─────────────────────────
 function createBirdMesh(color) {
   const group = new THREE.Group();
   const bc = new THREE.Color(color);
   const hc = bc.clone().lerp(new THREE.Color(0xffffff), 0.3);
-  const bodyMat = new THREE.MeshStandardMaterial({ color: bc, metalness: 0.15, roughness: 0.7 });
-  const headMat = new THREE.MeshStandardMaterial({ color: hc, metalness: 0.15, roughness: 0.7 });
-  const beakMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.2, roughness: 0.5 });
+  const bodyMat = new THREE.MeshLambertMaterial({ color: bc, flatShading: true });
+  const headMat = new THREE.MeshLambertMaterial({ color: hc, flatShading: true });
+  const beakMat = new THREE.MeshLambertMaterial({ color: 0xf59e0b, flatShading: true });
 
-  // body
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.55, 1.6), bodyMat);
+  // body — wide chunky box
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.8, 1.8), bodyMat);
   body.castShadow = true;
   group.add(body);
   group.userData.body = body;
   group.userData.bodyMat = bodyMat;
 
-  // head
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.5, 0.6), headMat);
-  head.position.set(0, 0.32, 0.65);
+  // head — big square N64 head
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.85, 0.9), headMat);
+  head.position.set(0, 0.5, 0.9);
   head.castShadow = true;
   group.add(head);
 
-  // beak
-  const beak = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.15, 0.5), beakMat);
-  beak.position.set(0, 0.2, 0.95);
+  // beak — chunky block
+  const beak = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.22, 0.5), beakMat);
+  beak.position.set(0, 0.38, 1.4);
   group.add(beak);
 
-  // eyes
+  // eyes — flat box pixels
   const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
   const glintMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 4), eyeMat);
-  eyeL.position.set(-0.2, 0.42, 0.85);
+  const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.05), eyeMat);
+  eyeL.position.set(-0.26, 0.62, 1.36);
   group.add(eyeL);
-  const eyeR = eyeL.clone(); eyeR.position.x = 0.2; group.add(eyeR);
-  const glL = new THREE.Mesh(new THREE.SphereGeometry(0.025, 4, 3), glintMat);
-  glL.position.set(-0.19, 0.44, 0.87);
+  const eyeR = eyeL.clone(); eyeR.position.x = 0.26; group.add(eyeR);
+  const glL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.05), glintMat);
+  glL.position.set(-0.22, 0.66, 1.37);
   group.add(glL);
-  const glR = glL.clone(); glR.position.x = 0.19; group.add(glR);
+  const glR = glL.clone(); glR.position.x = 0.22; group.add(glR);
 
-  // wings
+  // wings — flat box panels
   function makeWing(side) {
     const wg = new THREE.Group();
-    const inner = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.1, 0.65), bodyMat);
-    inner.position.set(side * 0.6, 0, 0);
+    const inner = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.15, 0.8), bodyMat);
+    inner.position.set(side * 0.7, 0, 0);
     inner.castShadow = true;
     wg.add(inner);
-    const outer = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.08, 0.45), bodyMat);
-    outer.position.set(side * 1.5, 0, 0.15);
+    const outer = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.12, 0.55), bodyMat);
+    outer.position.set(side * 1.9, 0, 0.15);
     outer.castShadow = true;
     wg.add(outer);
-    wg.position.set(side * 0.5, 0, 0.1);
+    wg.position.set(side * 0.6, 0, 0.1);
     wg.userData.outer = outer;
     return wg;
   }
@@ -544,15 +540,12 @@ function createBirdMesh(color) {
   group.userData.leftWing = lw;
   group.userData.rightWing = rw;
 
-  // tail
+  // tail — single chunky block
   const tailG = new THREE.Group();
-  for (let i = -1; i <= 1; i++) {
-    const t = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.06, 0.5), bodyMat);
-    t.position.set(i * 0.15, 0, -0.3);
-    t.rotation.y = i * 0.15;
-    tailG.add(t);
-  }
-  tailG.position.set(0, 0.05, -0.8);
+  const t = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.15, 0.6), bodyMat);
+  t.position.set(0, 0, -0.3);
+  tailG.add(t);
+  tailG.position.set(0, 0.05, -0.9);
   group.add(tailG);
   group.userData.tail = tailG;
 
@@ -2153,7 +2146,7 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer.setSize(window.innerWidth, window.innerHeight);
-  bloomPass.setSize(window.innerWidth, window.innerHeight);
+  pixelPass.setSize(window.innerWidth, window.innerHeight);
 });
 </script>
 </body>
