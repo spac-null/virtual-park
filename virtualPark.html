@@ -74,6 +74,15 @@ canvas{display:block;cursor:none}
 }
 
 .name-label{position:absolute;z-index:8;pointer-events:none;font-family:'Courier New',monospace;font-size:10px;color:#1a1a2e;text-shadow:0 1px 2px rgba(255,255,255,0.8);white-space:nowrap;transform:translate(-50%,-100%)}
+#char-select{position:absolute;top:0;left:0;width:100%;height:100%;background:#87ceeb;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:50;font-family:'Courier New',monospace}
+.cs-title{font-size:38px;color:#1a1a2e;letter-spacing:6px;margin-bottom:6px;font-weight:bold}
+.cs-sub{font-size:12px;color:#555;letter-spacing:3px;text-transform:uppercase;margin-bottom:40px}
+.cs-row{display:flex;gap:28px}
+.cs-btn{background:rgba(255,255,255,0.9);border:2px solid rgba(0,100,200,0.22);border-radius:12px;padding:28px 36px;cursor:pointer;font-family:'Courier New',monospace;text-align:center;transition:transform 0.1s,box-shadow 0.1s;box-shadow:0 2px 14px rgba(0,0,0,0.1);min-width:180px}
+.cs-btn:hover{transform:scale(1.05);box-shadow:0 6px 24px rgba(0,0,0,0.18)}
+.cs-icon{font-size:52px;margin-bottom:12px}
+.cs-name{font-size:18px;color:#0055cc;letter-spacing:3px;margin-bottom:6px}
+.cs-desc{font-size:10px;color:#888;line-height:1.6}
 </style>
 </head>
 <body>
@@ -130,6 +139,23 @@ canvas{display:block;cursor:none}
 <div id="mobile-joy"><div id="joy-base"><div id="joy-thumb"></div></div></div>
 <div id="mobile-flap">FLAP</div>
 
+<div id="char-select">
+  <div class="cs-title">THE GARDEN ABOVE</div>
+  <div class="cs-sub">choose your creature</div>
+  <div class="cs-row">
+    <button class="cs-btn" id="btn-bird">
+      <div class="cs-icon">~~^~~</div>
+      <div class="cs-name">BIRD</div>
+      <div class="cs-desc">fly · collect gems<br>bank at nest · race</div>
+    </button>
+    <button class="cs-btn" id="btn-duck">
+      <div class="cs-icon">(^_^)</div>
+      <div class="cs-name">DUCK</div>
+      <div class="cs-desc">walk · bazooka birds<br>drop bomb eggs · boom</div>
+    </button>
+  </div>
+</div>
+
 <script type="importmap">{"imports":{"three":"https://esm.sh/three@0.167.0","three/addons/":"https://esm.sh/three@0.167.0/examples/jsm/"}}</script>
 <script type="module">
 import * as THREE from 'three';
@@ -168,6 +194,10 @@ const lerp  = (a, b, t) => a + (b - a) * Math.min(t, 1);
 const rand  = (a, b) => a + Math.random() * (b - a);
 const randInt = (a, b) => Math.floor(rand(a, b + 1));
 const pick  = a => a[Math.floor(Math.random() * a.length)];
+
+function terrainY(x, z) {
+  return Math.sin(x*0.06)*2.5 + Math.cos(z*0.05)*2.0 + Math.sin(x*0.12+z*0.09)*1.2;
+}
 
 const adjectives = ['swift','dark','bright','keen','wild','bold','sharp','cold','grim','pale',
                     'ghost','ash','storm','drift','dusk','dawn','iron','flame','void','frost'];
@@ -529,6 +559,77 @@ function createBirdMesh(color) {
   return group;
 }
 
+// ── DUCK MESH ────────────────────────────────────────────
+function createDuckMesh(color) {
+  const g = new THREE.Group();
+  const c = new THREE.Color(color);
+  const bodyMat = new THREE.MeshStandardMaterial({ color: c, roughness: 0.8 });
+  const whiteMat = new THREE.MeshStandardMaterial({ color: 0xfffde0 });
+  const billMat  = new THREE.MeshStandardMaterial({ color: 0xff8c00 });
+  const gunMat   = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.6 });
+
+  // body
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.78, 12, 8), bodyMat);
+  body.scale.set(1, 0.72, 1.1); g.add(body);
+  g.userData.body = body; g.userData.bodyMat = bodyMat;
+
+  // belly
+  const belly = new THREE.Mesh(new THREE.SphereGeometry(0.52, 8, 6), whiteMat);
+  belly.position.set(0, -0.1, 0.28); belly.scale.set(0.9, 0.65, 0.75); g.add(belly);
+
+  // head
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.42, 10, 7), bodyMat);
+  head.position.set(0, 0.56, 0.42); g.add(head);
+  g.userData.duckHead = head;
+
+  // upper bill
+  const bill = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.11, 0.40), billMat);
+  bill.position.set(0, 0.48, 0.87); bill.rotation.x = 0.12; g.add(bill);
+  // lower bill
+  const billL = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.09, 0.36), billMat);
+  billL.position.set(0, 0.40, 0.86); billL.rotation.x = 0.18; g.add(billL);
+
+  // eyes + glints
+  [-0.19, 0.19].forEach(ex => {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.078, 6, 5),
+      new THREE.MeshBasicMaterial({ color: 0x111111 }));
+    eye.position.set(ex, 0.66, 0.73); g.add(eye);
+    const gl = new THREE.Mesh(new THREE.SphereGeometry(0.03, 4, 3),
+      new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    gl.position.set(ex + Math.sign(ex)*0.03, 0.68, 0.75); g.add(gl);
+  });
+
+  // tail
+  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.55, 6), bodyMat);
+  tail.position.set(0, 0.30, -0.80); tail.rotation.x = -0.78; g.add(tail);
+  const tailCurl = new THREE.Mesh(new THREE.SphereGeometry(0.14, 5, 4), bodyMat);
+  tailCurl.position.set(0, 0.56, -0.84); g.add(tailCurl);
+
+  // wings
+  [-1, 1].forEach(side => {
+    const wing = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.1, 0.62), bodyMat);
+    wing.position.set(side * 0.84, -0.05, 0.05);
+    wing.rotation.z = side * -0.18; g.add(wing);
+    if (side === -1) g.userData.duckLeftWing = wing;
+    else g.userData.duckRightWing = wing;
+  });
+
+  // feet (orange flat boxes)
+  [-0.22, 0.22].forEach((fx, fi) => {
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.06, 0.30), billMat);
+    foot.position.set(fx, -0.58, 0.1);
+    foot.rotation.y = fi === 0 ? 0.22 : -0.22; g.add(foot);
+  });
+
+  // bazooka (right side, horizontal cylinder)
+  const bazBarrel = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 1.05, 8), gunMat);
+  bazBarrel.rotation.z = Math.PI / 2; bazBarrel.position.set(0.92, 0.08, 0.18); g.add(bazBarrel);
+  const bazMuzzle = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.09, 0.2, 8), gunMat);
+  bazMuzzle.rotation.z = Math.PI / 2; bazMuzzle.position.set(1.45, 0.08, 0.18); g.add(bazMuzzle);
+
+  return g;
+}
+
 // ── PLAYER STATE ────────────────────────────────────────
 const player = {
   mesh: null,
@@ -563,6 +664,7 @@ window.addEventListener('keydown', e => {
   if (e.key === '?' || e.key === '/') {
     document.getElementById('controls-overlay').classList.toggle('visible');
   }
+  if ((e.code === 'Space') && playerRole === 'duck') { e.preventDefault(); initAudio(); dropEgg(); }
 });
 window.addEventListener('keyup', e => {
   keys[e.code] = false;
@@ -575,7 +677,10 @@ window.addEventListener('keyup', e => {
 // right-drag free look
 let mouseRightDown = false, freeLookYaw = 0, freeLookPitch = 0;
 renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
-renderer.domElement.addEventListener('mousedown', e => { if (e.button === 2) mouseRightDown = true; });
+renderer.domElement.addEventListener('mousedown', e => {
+  if (e.button === 2) mouseRightDown = true;
+  if (e.button === 0 && playerRole === 'duck') { initAudio(); fireBarooka(); }
+});
 window.addEventListener('mouseup', e => {
   if (e.button === 2) { mouseRightDown = false; freeLookYaw = 0; freeLookPitch = 0; }
 });
@@ -727,6 +832,157 @@ function updateParticles(dt) {
   }
 }
 
+// ── WEAPONS & EXPLOSIONS ─────────────────────────────────
+const projectiles = [];
+const eggs = [];
+const explosionFX = [];
+
+const _boomFlash = document.createElement('div');
+_boomFlash.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:30;opacity:0;background:rgba(255,185,0,0.72);transition:opacity 0.18s';
+document.body.appendChild(_boomFlash);
+let _boomFlashTimer = 0;
+
+function explode(pos, power) {
+  // particle burst
+  const cols = [0xff4400, 0xff8800, 0xffcc00, 0xff2222, 0xffffff, 0xff6600];
+  const cnt = Math.min(Math.floor(power * 9 + 20), MAX_PARTICLES - particles.length);
+  for (let i = 0; i < cnt; i++) {
+    const m = _particlePool[particles.length];
+    m.material.color.set(cols[Math.floor(Math.random() * cols.length)]);
+    m.material.opacity = 1; m.visible = true; m.position.copy(pos);
+    const spd = rand(5, 14) * power;
+    particles.push({ mesh: m, vel: new THREE.Vector3(rand(-1,1), rand(0.2,1), rand(-1,1)).normalize().multiplyScalar(spd), life: 0.55 + rand(0, 0.45) });
+  }
+  // big orange ring
+  const ring1 = new THREE.Mesh(
+    new THREE.TorusGeometry(0.5, 0.32, 6, 22),
+    new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 0.92, side: THREE.DoubleSide }));
+  ring1.position.copy(pos); ring1.rotation.x = Math.PI / 2; scene.add(ring1);
+  explosionFX.push({ ring: ring1, life: 0.55, maxLife: 0.55, maxR: power * 5.5 + 4 });
+  // white inner ring
+  const ring2 = new THREE.Mesh(
+    new THREE.TorusGeometry(0.3, 0.2, 5, 18),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, side: THREE.DoubleSide }));
+  ring2.position.copy(pos); ring2.rotation.x = Math.PI / 2; scene.add(ring2);
+  explosionFX.push({ ring: ring2, life: 0.35, maxLife: 0.35, maxR: power * 3.5 + 2 });
+
+  _boomFlash.style.transition = 'none'; _boomFlash.style.opacity = '1';
+  _boomFlashTimer = 0.14;
+  camShake = Math.min(camShake + 0.7 * power, 2.5);
+  showZoneFlash('BOOM!', '#ff4400');
+  if (audioCtx) playExplosion();
+}
+
+function updateExplosionFX(dt) {
+  if (_boomFlashTimer > 0) {
+    _boomFlashTimer -= dt;
+    if (_boomFlashTimer <= 0) { _boomFlash.style.transition = 'opacity 0.18s'; _boomFlash.style.opacity = '0'; }
+  }
+  for (let i = explosionFX.length - 1; i >= 0; i--) {
+    const fx = explosionFX[i];
+    fx.life -= dt;
+    if (fx.life <= 0) {
+      scene.remove(fx.ring); fx.ring.geometry.dispose(); fx.ring.material.dispose();
+      explosionFX.splice(i, 1);
+    } else {
+      const t = 1 - fx.life / fx.maxLife;
+      fx.ring.scale.setScalar(fx.maxR * t + 0.5);
+      fx.ring.material.opacity = (1 - t) * 0.9;
+    }
+  }
+}
+
+function fireBarooka() {
+  if (playerRole !== 'duck' || bazookaCooldown > 0 || !audioCtx) return;
+  bazookaCooldown = 0.75;
+  initAudio();
+  const dir = new THREE.Vector3(-Math.sin(duckYaw), 0.12, -Math.cos(duckYaw)).normalize();
+  const sp = player.mesh.position.clone().addScaledVector(dir, 1.6).add(new THREE.Vector3(0, 0.5, 0));
+  const pm = new THREE.Mesh(
+    new THREE.SphereGeometry(0.28, 6, 5),
+    new THREE.MeshStandardMaterial({ color: 0x333333, emissive: 0xff6600, emissiveIntensity: 1.2 }));
+  pm.position.copy(sp); scene.add(pm);
+  burstParticles(sp.clone(), 0xff8800);
+  projectiles.push({ mesh: pm, vel: dir.clone().multiplyScalar(24), life: 3.0 });
+  playBump(); // reuse bump sound for muzzle
+}
+
+function dropEgg() {
+  if (playerRole !== 'duck' || eggCooldown > 0) return;
+  eggCooldown = 2.5;
+  const em = new THREE.Mesh(
+    new THREE.SphereGeometry(0.36, 8, 6),
+    new THREE.MeshStandardMaterial({ color: 0xfffde0, roughness: 0.55 }));
+  em.scale.y = 1.38;
+  em.position.copy(player.mesh.position); em.position.y += 0.3;
+  const stripe = new THREE.Mesh(
+    new THREE.TorusGeometry(0.33, 0.07, 6, 16),
+    new THREE.MeshBasicMaterial({ color: 0xff2200 }));
+  stripe.rotation.x = Math.PI / 2; em.add(stripe);
+  scene.add(em);
+  eggs.push({ mesh: em, vel: new THREE.Vector3(rand(-1,1)*1.5, 3, rand(-1,1)*1.5), life: 6.0, bounced: false });
+}
+
+function updateProjectiles(dt) {
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    const p = projectiles[i];
+    p.vel.y -= 5 * dt;
+    p.mesh.position.addScaledVector(p.vel, dt);
+    p.mesh.rotation.z += 6 * dt;
+    p.life -= dt;
+    const gY = terrainY(p.mesh.position.x, p.mesh.position.z);
+    let hit = false;
+    if (p.mesh.position.y < gY + 0.5 || p.life <= 0) hit = true;
+    if (!hit) {
+      for (const id in remotePlayers) {
+        if (p.mesh.position.distanceTo(remotePlayers[id].mesh.position) < 5) {
+          player.score += 2; player.score = Math.min(player.score, 999);
+          showZoneFlash('+2 DIRECT HIT!', '#ff4400'); hit = true; break;
+        }
+      }
+    }
+    if (!hit) {
+      for (let ni = 0; ni < npcBirds.length; ni++) {
+        if (p.mesh.position.distanceTo(npcBirds[ni].pos) < 4.5) {
+          npcBirds[ni].vel.addScaledVector(p.vel.clone().normalize(), 10);
+          hit = true; break;
+        }
+      }
+    }
+    if (hit) {
+      explode(p.mesh.position.clone(), 1.2);
+      scene.remove(p.mesh); p.mesh.geometry.dispose(); p.mesh.material.dispose();
+      projectiles.splice(i, 1);
+    }
+  }
+}
+
+function updateEggs(dt) {
+  for (let i = eggs.length - 1; i >= 0; i--) {
+    const e = eggs[i];
+    e.vel.y -= 14 * dt;
+    e.mesh.position.addScaledVector(e.vel, dt);
+    e.mesh.rotation.z += 3 * dt;
+    e.life -= dt;
+    const gY = terrainY(e.mesh.position.x, e.mesh.position.z);
+    if (e.mesh.position.y < gY + 0.35) {
+      if (!e.bounced) {
+        e.bounced = true;
+        e.vel.y = Math.abs(e.vel.y) * 0.42;
+        e.vel.x *= 0.5; e.vel.z *= 0.5;
+        e.mesh.position.y = gY + 0.35;
+      } else {
+        explode(e.mesh.position.clone(), 1.8);
+        scene.remove(e.mesh); e.mesh.geometry.dispose(); eggs.splice(i, 1); continue;
+      }
+    }
+    if (e.life <= 0) {
+      explode(e.mesh.position.clone(), 1.8);
+      scene.remove(e.mesh); e.mesh.geometry.dispose(); eggs.splice(i, 1);
+    }
+  }
+}
+
 // ── AUDIO ───────────────────────────────────────────────
 let audioCtx = null, masterGain = null, windGain = null;
 
@@ -837,6 +1093,26 @@ function playWin() {
     g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.13 + 0.45);
     o.connect(g); g.connect(masterGain); o.start(t + i * 0.13); o.stop(t + i * 0.13 + 0.5);
   });
+}
+
+function playExplosion() {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  const o = audioCtx.createOscillator(); o.type = 'sine';
+  o.frequency.setValueAtTime(110, t);
+  o.frequency.exponentialRampToValueAtTime(22, t + 0.45);
+  const g = audioCtx.createGain();
+  g.gain.setValueAtTime(0.55, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+  o.connect(g); g.connect(masterGain); o.start(t); o.stop(t + 0.55);
+  // crack
+  const bufLen = Math.floor(audioCtx.sampleRate * 0.18);
+  const nb = audioCtx.createBuffer(1, bufLen, audioCtx.sampleRate);
+  const nd = nb.getChannelData(0);
+  for (let i = 0; i < bufLen; i++) nd[i] = (Math.random()*2-1) * Math.pow(1 - i/bufLen, 1.8);
+  const ns = audioCtx.createBufferSource(); ns.buffer = nb;
+  const ng = audioCtx.createGain(); ng.gain.value = 0.45;
+  ns.connect(ng); ng.connect(masterGain); ns.start(t);
 }
 
 // ── NPC BIRDS (boids) ───────────────────────────────────
@@ -1052,6 +1328,11 @@ function connectWS() {
 }
 
 let lastSend = 0;
+let playerRole = null;  // 'bird' | 'duck' — set by char-select
+let duckYaw = 0;
+let camShake = 0;
+let bazookaCooldown = 0;
+let eggCooldown = 0;
 function sendMove() {
   if (!ws || ws.readyState !== 1) return;
   const now = performance.now();
@@ -1065,7 +1346,8 @@ function sendMove() {
     y: +p.y.toFixed(2),
     rotY: +player.mesh.rotation.y.toFixed(3),
     name: playerName,
-    score: player.score
+    score: player.score,
+    role: playerRole || 'bird'
   }));
 }
 
@@ -1346,8 +1628,24 @@ window.addEventListener('click', onFirstInteraction);
 window.addEventListener('keydown', onFirstInteraction);
 window.addEventListener('touchstart', onFirstInteraction);
 
-initGems();
-connectWS();
+function startGame(role) {
+  playerRole = role;
+  document.getElementById('char-select').style.display = 'none';
+  if (role === 'duck') {
+    // replace player mesh with duck
+    scene.remove(player.mesh);
+    player.mesh = createDuckMesh(player.color);
+    player.mesh.position.set(0, terrainY(0, 0) + 0.9, 0);
+    scene.add(player.mesh);
+    duckYaw = 0;
+  }
+  initAudio();
+  initGems();
+  connectWS();
+}
+
+document.getElementById('btn-bird').addEventListener('click', () => startGame('bird'));
+document.getElementById('btn-duck').addEventListener('click', () => startGame('duck'));
 
 // ── NEST WARS ───────────────────────────────────────────
 const NEST_WIN = 15;
@@ -1433,7 +1731,40 @@ function animate() {
   dt = Math.min(dt, 0.05);
   const time = clock.elapsedTime;
 
-  // ── FLIGHT PHYSICS ──────────────────────────────────
+  // ── FLIGHT PHYSICS (bird) / GROUND MOVEMENT (duck) ──
+  if (playerRole === 'duck') {
+    // duck ground movement
+    if (keys['KeyA'] || keys['ArrowLeft'])  duckYaw += 2.5 * dt;
+    if (keys['KeyD'] || keys['ArrowRight']) duckYaw -= 2.5 * dt;
+    const duckSpd = 9;
+    let duckMoving = false;
+    if (keys['KeyW'] || keys['ArrowUp']) {
+      player.mesh.position.x -= Math.sin(duckYaw) * duckSpd * dt;
+      player.mesh.position.z -= Math.cos(duckYaw) * duckSpd * dt;
+      duckMoving = true;
+    }
+    if (keys['KeyS'] || keys['ArrowDown']) {
+      player.mesh.position.x += Math.sin(duckYaw) * duckSpd * dt;
+      player.mesh.position.z += Math.cos(duckYaw) * duckSpd * dt;
+      duckMoving = true;
+    }
+    const dl = player.mesh.position.length();
+    if (dl > 82) player.mesh.position.multiplyScalar(82 / dl);
+    const gy = terrainY(player.mesh.position.x, player.mesh.position.z);
+    player.mesh.position.y = gy + 0.88;
+    player.mesh.rotation.y = duckYaw;
+    player.mesh.rotation.z = duckMoving ? Math.sin(time * 6) * 0.1 : lerp(player.mesh.rotation.z, 0, 5 * dt);
+    if (player.mesh.userData.duckLeftWing) {
+      const wa = duckMoving ? Math.sin(time * 10) * 0.22 : 0;
+      player.mesh.userData.duckLeftWing.rotation.z = -0.18 + wa;
+      player.mesh.userData.duckRightWing.rotation.z = 0.18 - wa;
+    }
+    bazookaCooldown = Math.max(0, bazookaCooldown - dt);
+    eggCooldown = Math.max(0, eggCooldown - dt);
+    // duck can still collect gems (radius 4.5 for ground reach)
+    player.speed = 0; player.pitchAngle = 0; player.bankAngle = 0;
+  } else {
+  // ── BIRD FLIGHT ──────────────────────────────────────
   const pitchRate = 2.6;
   const yawRate   = 2.0;
   const rollRate  = 3.0;
@@ -1525,8 +1856,8 @@ function animate() {
   }
 
   // ── BIRD COLLISION ───────────────────────────────────
-  // vs remote players
-  for (const id in remotePlayers) {
+  // vs remote players (birds only — duck has bazooka instead)
+  if (playerRole !== 'duck') for (const id in remotePlayers) {
     const rp = remotePlayers[id];
     _tv1.copy(player.mesh.position).sub(rp.mesh.position);
     const dist = _tv1.length();
@@ -1562,28 +1893,30 @@ function animate() {
       }
     }
   }
-  // vs NPC birds
-  for (let i = 0; i < npcBirds.length; i++) {
+  // vs NPC birds (birds only)
+  if (playerRole !== 'duck') for (let i = 0; i < npcBirds.length; i++) {
     _tv1.copy(player.mesh.position).sub(npcBirds[i].pos);
     const dist = _tv1.length();
     if (dist < 3.0 && dist > 0.01) {
       const push = 10 * (3.0 - dist) / 3.0;
       _tv1.normalize().multiplyScalar(push);
       player.vel.add(_tv1);
-      // Scatter the NPC
       npcBirds[i].vel.copy(_tv1).multiplyScalar(-3);
     }
   }
   // Hit flash timer
   if (player.hitFlash > 0) { player.hitFlash -= dt; }
 
-  // ── BIRD MESH ORIENTATION ───────────────────────────
-  player.mesh.rotation.z = -player.bankAngle * 0.7;
-  if (player.mesh.userData.body) {
-    player.mesh.userData.body.rotation.x = player.pitchAngle;
+  } // end bird-only block
+
+  // ── BIRD/DUCK MESH ORIENTATION ───────────────────────
+  if (playerRole !== 'duck') {
+    player.mesh.rotation.z = -player.bankAngle * 0.7;
+    if (player.mesh.userData.body) player.mesh.userData.body.rotation.x = player.pitchAngle;
   }
 
-  // wing animation
+  // wing animation (bird only — duck wings handled in movement block)
+  if (playerRole !== 'duck') {
   if (player.flapAnim > 0) {
     player.flapAnim -= dt;
     const wa = Math.sin(time * 50) * 0.55;
@@ -1594,14 +1927,17 @@ function animate() {
     player.mesh.userData.leftWing.rotation.z = glide + player.bankAngle * 0.3;
     player.mesh.userData.rightWing.rotation.z = -glide - player.bankAngle * 0.3;
   }
+  }
 
-  // swept wings at high speed
-  const lwo = player.mesh.userData.leftWing.userData.outer;
-  const rwo = player.mesh.userData.rightWing.userData.outer;
+  // swept wings at high speed (bird only)
+  if (playerRole !== 'duck') {
+  const lwo = player.mesh.userData.leftWing ? player.mesh.userData.leftWing.userData.outer : null;
+  const rwo = player.mesh.userData.rightWing ? player.mesh.userData.rightWing.userData.outer : null;
   if (lwo && rwo) {
     const tgtSweep = player.speed > 18 ? 0.3 : 0;
     lwo.rotation.y = lerp(lwo.rotation.y, tgtSweep, 5 * dt);
     rwo.rotation.y = lerp(rwo.rotation.y, -tgtSweep, 5 * dt);
+  }
   }
 
   // ghost trail
@@ -1630,6 +1966,21 @@ function animate() {
   }
 
   // ── CAMERA ──────────────────────────────────────────
+  // Camera shake decay
+  if (camShake > 0) {
+    camShake = Math.max(0, camShake - dt * 4);
+    camera.position.x += (Math.random() - 0.5) * camShake * 0.4;
+    camera.position.y += (Math.random() - 0.5) * camShake * 0.2;
+  }
+
+  if (playerRole === 'duck') {
+    // Ground-level camera behind duck
+    _tv2.set(Math.sin(duckYaw) * 10, 4.5, Math.cos(duckYaw) * 10);
+    _tv2.add(player.mesh.position);
+    camera.position.lerp(_tv2, Math.min(5 * dt, 1));
+    _tv1.copy(player.mesh.position); _tv1.y += 1.2;
+    camera.lookAt(_tv1);
+  } else {
   // Lag camera yaw behind bird — prevents shake on sharp turns
   let dyaw = player.mesh.rotation.y - camState.yaw;
   while (dyaw > Math.PI)  dyaw -= Math.PI * 2;
@@ -1658,6 +2009,7 @@ function animate() {
   }
   camera.lookAt(_tv1);
   // No rotation.z — lookAt handles full orientation cleanly, no fighting
+  } // end bird camera block
 
   // ── GEMS UPDATE ─────────────────────────────────────
   for (let gi = 0; gi < gems.length; gi++) {
@@ -1670,7 +2022,7 @@ function animate() {
     if (g.beam) g.beam.intensity = 4 + Math.sin(time * 3) * 3;
 
     const dist = player.mesh.position.distanceTo(g.mesh.position);
-    if (dist < 3.0) {
+    if (dist < (playerRole === 'duck' ? 5.0 : 3.0)) {
       const gt = CFG.gemTypes[g.type];
       nestState.carried += gt.points;
       player.score = nestState.banked;
@@ -1744,8 +2096,10 @@ function animate() {
   }
   updateNestHUD();
 
-  // ── PARTICLES ───────────────────────────────────────
+  // ── PARTICLES + WEAPONS ─────────────────────────────
   updateParticles(dt);
+  if (playerRole === 'duck') { updateProjectiles(dt); updateEggs(dt); }
+  updateExplosionFX(dt);
 
   // ── NPC BIRDS (every 2 frames — 8×boids is cheap but no need at 60fps) ──
   if (_frameCount % 2 === 0) updateNPCs(dt * 2);
