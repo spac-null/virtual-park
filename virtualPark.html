@@ -1658,39 +1658,39 @@ function addTrace(x, z, y, text, color, name) {
 
   // Canvas text sprite — floating label above the orb
   const canvas = document.createElement('canvas');
-  // word-wrap at 22 chars
+  // word-wrap at 18 chars
   const words = text.split(' ');
   let line = '', lines = [];
   for (const w of words) {
-    if ((line + w).length > 22) { lines.push(line.trim()); line = ''; }
+    if ((line + w).length > 18) { lines.push(line.trim()); line = ''; }
     line += w + ' ';
   }
   if (line.trim()) lines.push(line.trim());
 
-  const lineH = 44;
-  canvas.width = 512;
-  canvas.height = Math.max(90, lines.length * lineH + 28);
+  const lineH = 30;
+  canvas.width = 256;
+  canvas.height = Math.max(52, lines.length * lineH + 18);
   const ctx = canvas.getContext('2d');
 
   // bright white pill background
   ctx.fillStyle = 'rgba(255,255,255,0.96)';
   ctx.beginPath();
-  ctx.roundRect(0, 0, canvas.width, canvas.height, 18);
+  ctx.roundRect(0, 0, canvas.width, canvas.height, 10);
   ctx.fill();
 
   // colored top bar
   ctx.fillStyle = color || '#00b3ff';
   ctx.beginPath();
-  ctx.roundRect(0, 0, canvas.width, 14, [18, 18, 0, 0]);
+  ctx.roundRect(0, 0, canvas.width, 8, [10, 10, 0, 0]);
   ctx.fill();
 
-  // text — large black, with sender color outline
-  ctx.font = 'bold 36px monospace';
+  // text — readable black, with sender color outline
+  ctx.font = 'bold 22px monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.strokeStyle = color || '#0055cc';
-  ctx.lineWidth = 5;
-  const startY = (canvas.height + 14) / 2 - ((lines.length - 1) * lineH) / 2;
+  ctx.lineWidth = 3;
+  const startY = (canvas.height + 8) / 2 - ((lines.length - 1) * lineH) / 2;
   lines.forEach((l, i) => {
     ctx.strokeText(l, canvas.width / 2, startY + i * lineH);
     ctx.fillStyle = '#111111';
@@ -1701,7 +1701,7 @@ function addTrace(x, z, y, text, color, name) {
   const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true });
   const sprite = new THREE.Sprite(spriteMat);
   const aspect = canvas.width / canvas.height;
-  sprite.scale.set(aspect * 0.72, 0.72, 1);
+  sprite.scale.set(aspect * 0.5, 0.5, 1);
   sprite.position.set(0, 2.2, 0);  // raised above terrain/rocks
   g.add(sprite);
 
