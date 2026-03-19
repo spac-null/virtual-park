@@ -1341,8 +1341,9 @@ function burstParticles(pos, color) {
   if (particles.length >= MAX_PARTICLES) return;
   const avail = MAX_PARTICLES - particles.length;
   const count = Math.min(10, avail);
+  const _bpBase = particles.length; // capture before push increments it
   for (let i = 0; i < count; i++) {
-    const entry = _particlePool[particles.length + i];
+    const entry = _particlePool[_bpBase + i];
     const m = entry.mesh;
     entry.startColor.set(color);
     m.material.color.set(color);
@@ -1542,8 +1543,8 @@ function fireRocket() {
   rocketG.quaternion.setFromUnitVectors(new THREE.Vector3(1,0,0), dir);
   scene.add(rocketG);
 
-  burstParticles(sp.clone(), 0xff6600);
   projectiles.push({ mesh: rocketG, vel: dir.clone().multiplyScalar(38), life: 4.0, isRocket: true, hitRadius: 7 });
+  burstParticles(sp.clone(), 0xff6600);
 
   // recoil — kick crab backward
   player.mesh.position.x += Math.sin(duckYaw) * 3.5;
@@ -1883,6 +1884,23 @@ for (let i = 0; i < CFG.npcCount; i++) {
 }
 
 const _boidVec = new THREE.Vector3();
+
+// NPC ambient chatter — fires if quiet for 35s
+const _npcLines = [
+  'nice day for a flight','watch out below!','anyone seen my nest?',
+  'the gems are gone again','i love this park','crab spotted!',
+  'too windy up here','found a rare gem!','birds rule crabs drool',
+  'where is everyone?','lovely view from up here','egg inbound!',
+  'swooping!','watch the cliff!','nice flying','gem at 3 o\'clock',
+];
+let _npcIdleTimer = 40, _lastTraceTime = 0;
+function _npcChatter() {
+  if (npcBirds.length === 0 || !playerRole) return;
+  const b = npcBirds[Math.floor(Math.random() * npcBirds.length)];
+  const line = _npcLines[Math.floor(Math.random() * _npcLines.length)];
+  const col = '#' + new THREE.Color(npcColors[npcBirds.indexOf(b)] || 0x888888).getHexString();
+  addTrace(b.pos.x, b.pos.z, b.pos.y, line, col, 'npc');
+}
 
 function updateNPCs(dt) {
   const pp = player.mesh.position;
@@ -2284,7 +2302,7 @@ function addTrace(x, z, y, text, color, name) {
   const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true });
   const sprite = new THREE.Sprite(spriteMat);
   const aspect = canvas.width / canvas.height;
-  sprite.scale.set(aspect * 0.5, 0.5, 1);
+  sprite.scale.set(aspect * 1.2, 1.2, 1);
   sprite.position.set(0, 2.2, 0);  // raised above terrain/rocks
   g.add(sprite);
 
@@ -2629,9 +2647,23 @@ function updateHUD(dt) {
     _drawRadarNestDot(rn.pos.x - pp.x, rn.pos.z - pp.z, ry, '#' + c.toString(16).padStart(6,'0'));
   }
 
-  // center dot
+  // NPC birds on radar — tiny dimmed grey squares
+  for (let _ni = 0; _ni < npcBirds.length; _ni++) {
+    const _nb = npcBirds[_ni];
+    const _ndx = _nb.pos.x - pp.x, _ndz = _nb.pos.z - pp.z;
+    if (_ndx*_ndx + _ndz*_ndz > 900) continue;
+    const _nrx = _ndx * _cosRy - _ndz * _sinRy;
+    const _nrz = _ndx * _sinRy + _ndz * _cosRy;
+    const _nsx = 41 + _nrx / 30 * 38, _nsy = 41 + _nrz / 30 * 38;
+    radarCtx.fillStyle = 'rgba(80,80,80,0.35)';
+    radarCtx.fillRect(_nsx - 1, _nsy - 1, 2, 2);
+  }
+
+  // center dot — player (larger, bright)
   radarCtx.fillStyle = '#0055cc';
-  radarCtx.fillRect(39.5, 39.5, 3, 3);
+  radarCtx.beginPath(); radarCtx.arc(41, 41, 3.5, 0, Math.PI*2); radarCtx.fill();
+  radarCtx.strokeStyle = '#fff'; radarCtx.lineWidth = 1.5;
+  radarCtx.stroke();
 
   // scoreboard — only rebuild when visible
   if (_scoreboardEl.classList.contains('visible')) {
@@ -3944,6 +3976,12 @@ function animate() {
   // ── CLOUD DRIFT ─────────────────────────────────────
   cloudMesh.position.x = Math.sin(time * 0.018) * 4;
   cloudMesh.position.z = Math.cos(time * 0.012) * 3;
+
+  // ── NPC IDLE CHATTER ────────────────────────────────
+  if (playerRole) {
+    _npcIdleTimer -= dt;
+    if (_npcIdleTimer <= 0) { _npcChatter(); _npcIdleTimer = rand(28, 55); }
+  }
 
   // ── TRACES DECAY ────────────────────────────────────
   for (let i = traces.length - 1; i >= 0; i--) {
