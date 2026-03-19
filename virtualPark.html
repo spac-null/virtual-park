@@ -58,8 +58,11 @@ canvas{display:block;cursor:none;position:fixed;top:0;left:0}
 #zone-flash{position:absolute;top:36%;left:50%;transform:translate(-50%,-50%);z-index:15;font-size:20px;font-weight:bold;letter-spacing:3px;opacity:0;transition:opacity 0.15s;pointer-events:none;text-shadow:0 1px 6px rgba(0,0,0,0.2)}
 #zone-flash.show{opacity:1}
 
-#scoreboard{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:20;opacity:0;pointer-events:none;transition:opacity 0.2s;min-width:280px}
-#scoreboard.visible{opacity:1}
+#scoreboard{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) translateY(12px);z-index:20;opacity:0;pointer-events:none;transition:opacity 0.22s ease,transform 0.22s ease;min-width:280px}
+#scoreboard.visible{opacity:1;transform:translate(-50%,-50%) translateY(0)}
+#combo-strip{position:absolute;top:54px;left:14px;z-index:11;pointer-events:none;display:none;font-family:'Courier New',monospace;font-size:12px;font-weight:bold;color:#ffcc00;background:rgba(30,20,0,0.82);border:1px solid rgba(255,200,0,0.35);border-radius:5px;padding:2px 10px 4px;letter-spacing:1px}
+#combo-strip .cs-bar{height:2px;background:rgba(255,200,0,0.3);border-radius:2px;margin-top:2px;overflow:hidden}
+#combo-strip .cs-fill{height:100%;background:#ffcc00;transition:width 0.08s linear}
 #scoreboard table{width:100%;border-collapse:collapse}
 #scoreboard th{text-align:left;padding:5px 10px;border-bottom:1px solid rgba(0,100,200,0.25);color:#0055cc;font-weight:400;font-size:11px;text-transform:uppercase;letter-spacing:1px}
 #scoreboard td{padding:3px 10px;border-bottom:1px solid rgba(0,0,0,0.06);font-size:12px}
@@ -116,6 +119,7 @@ canvas{display:block;cursor:none;position:fixed;top:0;left:0}
   <span class="hud-gems">💎 0</span>
   <span class="hud-rank">#-</span>
 </div>
+<div id="combo-strip">×<span id="combo-n">0</span> COMBO<div class="cs-bar"><div class="cs-fill" id="combo-fill" style="width:100%"></div></div></div>
 
 <div id="hud-online">
   <div class="online-header"><span class="dot off"></span><span class="status">OFFLINE</span></div>
@@ -171,6 +175,7 @@ canvas{display:block;cursor:none;position:fixed;top:0;left:0}
     <tr><td>C</td><td>jump (crab)</td></tr>
     <tr><td>F</td><td>burrow — 1.8s invincible (crab, 8s cd)</td></tr>
     <tr><td>G</td><td>shield wall — 3s block + invincible (crab, 10s cd)</td></tr>
+    <tr><td>X</td><td>grappling hook — pull toward point (crab, 7s cd)</td></tr>
     <tr><td>W+W</td><td>dash forward (crab)</td></tr>
     <tr><td>R</td><td>respawn (if stuck)</td></tr>
     <tr><td>?</td><td>this overlay</td></tr>
@@ -1434,15 +1439,37 @@ function _makePanner(px, py, pz) {
   return pan;
 }
 
-function playGemCollect(freq, px, py, pz) {
+function playGemCollect(freq, px, py, pz, typeIdx) {
   if (!audioCtx) return;
   const t = audioCtx.currentTime;
-  const o = audioCtx.createOscillator(); o.type = 'sine'; o.frequency.value = freq;
-  const g = audioCtx.createGain();
-  g.gain.setValueAtTime(0.2, t);
-  g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
   const dest = (px !== undefined) ? _makePanner(px, py, pz) : masterGain;
-  o.connect(g); g.connect(dest); o.start(t); o.stop(t + 0.2);
+  if (typeIdx === 2) {
+    // epic — rich chord: root + fifth + octave, sawtooth, long sustain
+    [freq * 0.5, freq, freq * 1.5].forEach((f, i) => {
+      const o = audioCtx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
+      const g = audioCtx.createGain();
+      g.gain.setValueAtTime(0, t + i * 0.03);
+      g.gain.linearRampToValueAtTime(0.12, t + i * 0.03 + 0.04);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+      o.connect(g); g.connect(dest); o.start(t + i * 0.03); o.stop(t + 0.6);
+    });
+  } else if (typeIdx === 1) {
+    // rare — ascending two-tone bell
+    [freq, freq * 1.26].forEach((f, i) => {
+      const o = audioCtx.createOscillator(); o.type = 'triangle'; o.frequency.value = f;
+      const g = audioCtx.createGain();
+      g.gain.setValueAtTime(0.18, t + i * 0.09);
+      g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.09 + 0.28);
+      o.connect(g); g.connect(dest); o.start(t + i * 0.09); o.stop(t + i * 0.09 + 0.3);
+    });
+  } else {
+    // common — short sine ping
+    const o = audioCtx.createOscillator(); o.type = 'sine'; o.frequency.value = freq;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.2, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+    o.connect(g); g.connect(dest); o.start(t); o.stop(t + 0.2);
+  }
 }
 
 function playArchBonus() {
@@ -2012,6 +2039,19 @@ window.addEventListener('keydown', e => {
   }
   if (e.key === 'Escape' && playerRole) { escMenuOpen ? closeEscMenu() : openEscMenu(); }
   if (e.code === 'KeyC' && playerRole === 'duck' && crabJumpVel === 0) { initAudio(); crabJumpVel = 9; player.mesh.position.y += 0.3; playFlap(); }
+  if (e.code === 'KeyX' && playerRole === 'duck') {
+    if (_hookActive) {
+      _hookActive = false; _hookAnchored = false;
+      _hookLine.visible = false; _hookTipMesh.visible = false;
+      _hookCooldown = 3;
+    } else if (_hookCooldown <= 0) {
+      initAudio();
+      _hookActive = true; _hookAnchored = false;
+      _hookProjPos.copy(player.mesh.position).setY(player.mesh.position.y + 0.5);
+      _hookDir.set(-Math.sin(duckYaw), 0.14, -Math.cos(duckYaw)).normalize();
+      _hookLine.visible = true; _hookTipMesh.visible = true;
+    }
+  }
   if (e.code === 'KeyG' && playerRole === 'duck' && _shieldTimer <= 0 && _shieldCooldown <= 0) {
     _shieldTimer = 3.0; player.invincible = 3.0;
     _shieldMesh.visible = true;
@@ -2170,6 +2210,15 @@ function updateHUD(dt) {
   _prevScore = player.score;
   scoreEl.textContent = '\u25C8 ' + player.score;
   gemCountEl.textContent = '\uD83D\uDC8E ' + player.gems;
+  // combo strip
+  const _cStrip = document.getElementById('combo-strip');
+  if (_cStrip) {
+    if (_comboCount >= 2 && _comboTimer > 0) {
+      _cStrip.style.display = 'block';
+      document.getElementById('combo-n').textContent = _comboCount;
+      document.getElementById('combo-fill').style.width = Math.round(_comboTimer / 5 * 100) + '%';
+    } else { _cStrip.style.display = 'none'; }
+  }
 
   const allPlayers = [{ name: playerName, score: player.score, me: true }];
   for (const id in remotePlayers) {
@@ -2700,6 +2749,26 @@ function showScorePop(text, sx, sy, color) {
 }
 let _prevScore = 0;
 
+// ── GRAPPLING HOOK ──────────────────────────────────────
+const _hookLineBuf = new Float32Array(6);
+const _hookLineGeo = new THREE.BufferGeometry();
+_hookLineGeo.setAttribute('position', new THREE.BufferAttribute(_hookLineBuf, 3));
+const _hookLine = new THREE.Line(_hookLineGeo,
+  new THREE.LineBasicMaterial({ color: 0x88ffcc, transparent: true, opacity: 0.85 }));
+_hookLine.visible = false;
+scene.add(_hookLine);
+const _hookTipMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(0.28, 6, 6),
+  new THREE.MeshStandardMaterial({ color: 0x88ffcc, emissive: 0x44ff99, emissiveIntensity: 2.0 })
+);
+_hookTipMesh.visible = false;
+scene.add(_hookTipMesh);
+let _hookActive = false, _hookAnchored = false;
+const _hookPos = new THREE.Vector3();
+const _hookProjPos = new THREE.Vector3();
+const _hookDir = new THREE.Vector3();
+let _hookPullTimer = 0, _hookCooldown = 0;
+
 // ── GEM COMBO ───────────────────────────────────────────
 let _comboTimer = 0, _comboCount = 0;
 
@@ -2828,6 +2897,46 @@ function animate() {
         showZoneFlash('EMERGED!', '#aacc44');
       }
     }
+    // ── GRAPPLING HOOK PHYSICS ─────────────────────────
+    if (_hookCooldown > 0) _hookCooldown -= dt;
+    if (_hookActive) {
+      if (!_hookAnchored) {
+        _hookProjPos.addScaledVector(_hookDir, 48 * dt);
+        const _hty = terrainY(_hookProjPos.x, _hookProjPos.z);
+        const _hDist = _hookProjPos.distanceTo(player.mesh.position);
+        if (_hookProjPos.y <= _hty + 0.4 || _hDist > 44) {
+          if (_hookProjPos.y <= _hty + 0.4) _hookProjPos.y = _hty + 0.4;
+          _hookPos.copy(_hookProjPos);
+          _hookAnchored = true; _hookPullTimer = 2.0;
+          if (audioCtx) {
+            const _ht = audioCtx.currentTime;
+            const _ho = audioCtx.createOscillator(); _ho.type = 'square'; _ho.frequency.value = 280;
+            const _hg = audioCtx.createGain();
+            _hg.gain.setValueAtTime(0.07, _ht); _hg.gain.exponentialRampToValueAtTime(0.001, _ht + 0.18);
+            _ho.connect(_hg); _hg.connect(masterGain); _ho.start(_ht); _ho.stop(_ht + 0.22);
+          }
+        }
+        _hookTipMesh.position.copy(_hookProjPos);
+      } else {
+        _hookPullTimer -= dt;
+        const _hToHook = new THREE.Vector3().subVectors(_hookPos, player.mesh.position);
+        const _hDistNow = _hToHook.length();
+        if (_hDistNow > 3.5 && _hookPullTimer > 0) {
+          _hToHook.normalize();
+          _crabDashVx += _hToHook.x * 32 * dt;
+          _crabDashVz += _hToHook.z * 32 * dt;
+        } else {
+          _hookActive = false; _hookAnchored = false;
+          _hookLine.visible = false; _hookTipMesh.visible = false;
+          _hookCooldown = 7;
+        }
+      }
+      const _lbuf = _hookLineGeo.attributes.position;
+      _lbuf.setXYZ(0, player.mesh.position.x, player.mesh.position.y + 0.5, player.mesh.position.z);
+      _lbuf.setXYZ(1, _hookTipMesh.position.x, _hookTipMesh.position.y, _hookTipMesh.position.z);
+      _lbuf.needsUpdate = true;
+    }
+
     // crab can collect gems (radius 4.5 for ground reach)
     player.speed = 0; player.pitchAngle = 0; player.bankAngle = 0;
   } else if (!spectatorMode) {
@@ -3272,7 +3381,7 @@ function animate() {
       player.score = nestState.banked + nestState.carried;
       player.gems++;
       burstParticles(g.mesh.position.clone(), gt.color);
-      playGemCollect(gt.freq, g.mesh.position.x, g.mesh.position.y, g.mesh.position.z);
+      playGemCollect(gt.freq, g.mesh.position.x, g.mesh.position.y, g.mesh.position.z, g.type);
 
       // combo
       _comboTimer = 5.0;
