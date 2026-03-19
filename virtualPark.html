@@ -3768,10 +3768,12 @@ function animate() {
   if (isTouchDevice) {
     // Mobile: rigid camera — always exactly behind bird, no smoothing, no lag
     const yaw = player.mesh.rotation.y;
+    const _mCamBack = player.landed ? 9 : 13;
+    const _mCamUp   = player.landed ? 8 : 3;
     camera.position.set(
-      player.mesh.position.x + Math.sin(yaw) * 13,
-      player.mesh.position.y + 3,
-      player.mesh.position.z + Math.cos(yaw) * 13
+      player.mesh.position.x + Math.sin(yaw) * _mCamBack,
+      player.mesh.position.y + _mCamUp,
+      player.mesh.position.z + Math.cos(yaw) * _mCamBack
     );
     _tv1.copy(player.mesh.position);
     _tv1.y += 1.5;
