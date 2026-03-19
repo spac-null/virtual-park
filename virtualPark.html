@@ -32,6 +32,8 @@ canvas{display:block;cursor:none;position:fixed;top:0;left:0}
 #hud-online .name{display:none}
 #hud-online .player-squares{display:none}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
+@keyframes scorePop{0%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-130%) scale(1.4)}}
+.score-pop{position:absolute;z-index:55;pointer-events:none;font-family:'Courier New',monospace;font-weight:bold;font-size:16px;text-shadow:0 0 8px currentColor;animation:scorePop 0.85s ease-out forwards;}
 
 #alt-bar{position:absolute;right:14px;top:50%;transform:translateY(-50%);width:6px;height:180px;z-index:10;pointer-events:none}
 #alt-bar .track{width:100%;height:100%;background:rgba(0,100,200,0.1);border-radius:3px;position:relative;overflow:hidden}
@@ -168,6 +170,7 @@ canvas{display:block;cursor:none;position:fixed;top:0;left:0}
     <tr><td>TAB</td><td>scoreboard</td></tr>
     <tr><td>C</td><td>jump (crab)</td></tr>
     <tr><td>F</td><td>burrow — 1.8s invincible (crab, 8s cd)</td></tr>
+    <tr><td>G</td><td>shield wall — 3s block + invincible (crab, 10s cd)</td></tr>
     <tr><td>W+W</td><td>dash forward (crab)</td></tr>
     <tr><td>R</td><td>respawn (if stuck)</td></tr>
     <tr><td>?</td><td>this overlay</td></tr>
@@ -2009,6 +2012,12 @@ window.addEventListener('keydown', e => {
   }
   if (e.key === 'Escape' && playerRole) { escMenuOpen ? closeEscMenu() : openEscMenu(); }
   if (e.code === 'KeyC' && playerRole === 'duck' && crabJumpVel === 0) { initAudio(); crabJumpVel = 9; player.mesh.position.y += 0.3; playFlap(); }
+  if (e.code === 'KeyG' && playerRole === 'duck' && _shieldTimer <= 0 && _shieldCooldown <= 0) {
+    _shieldTimer = 3.0; player.invincible = 3.0;
+    _shieldMesh.visible = true;
+    showZoneFlash('🛡 SHIELD!', '#4488ff');
+    initAudio(); if (audioCtx) playFlap();
+  }
   if (e.code === 'KeyF' && playerRole === 'duck' && !crabBurrowing && burrowCooldown <= 0) {
     crabBurrowing = true; burrowTimer = 1.8; player.invincible = 1.8;
     player.mesh.visible = false;
@@ -2127,16 +2136,23 @@ function updateOnlineHUD() {
   const playerList = document.querySelector('#hud-online .player-list');
   if (!playerList) return;
   const myHex = player.color.toString(16).padStart(6, '0');
-  let rows = `<div class="pl-row"><div class="pl-color" style="background:#${myHex}"></div><span class="pl-name pl-me">${playerName}</span></div>`;
+  const _myIcon = playerRole === 'duck' ? '🦀' : '🦅';
+  let rows = `<div class="pl-row"><div class="pl-color" style="background:#${myHex}"></div><span class="pl-name pl-me">${_myIcon} ${playerName}</span></div>`;
   for (const id in remotePlayers) {
     const c = (remotePlayers[id].color || 0x888888).toString(16).padStart(6, '0');
     const rn = (remotePlayers[id].name || '?').toUpperCase();
-    rows += `<div class="pl-row"><div class="pl-color" style="background:#${c}"></div><span class="pl-name">${rn}</span></div>`;
+    const _ri = remotePlayers[id].role === 'duck' ? '🦀' : '🦅';
+    rows += `<div class="pl-row"><div class="pl-color" style="background:#${c}"></div><span class="pl-name">${_ri} ${rn}</span></div>`;
   }
   playerList.innerHTML = rows;
 }
 
 function updateHUD(dt) {
+  if (player.score > _prevScore) {
+    const _sr = scoreEl.getBoundingClientRect();
+    showScorePop('+' + (player.score - _prevScore), _sr.left + _sr.width / 2, _sr.top, '#ffee44');
+  }
+  _prevScore = player.score;
   scoreEl.textContent = '\u25C8 ' + player.score;
   gemCountEl.textContent = '\uD83D\uDC8E ' + player.gems;
 
@@ -2272,7 +2288,7 @@ function updateRemotePlayers(dt) {
         label.style.display = 'block';
         label.style.left = ((projVec.x + 1) / 2 * window.innerWidth) + 'px';
         label.style.top = ((-projVec.y + 1) / 2 * window.innerHeight) + 'px';
-        label.textContent = (rp.name || 'bird') + ' [' + (rp.score || 0) + ']';
+        label.textContent = (rp.role === 'duck' ? '🦀 ' : '🦅 ') + (rp.name || 'bird') + '  ' + (rp.score || 0);
       }
     }
   }
@@ -2626,6 +2642,49 @@ document.body.appendChild(_magHudEl);
 // ── CRAB BURROW ─────────────────────────────────────────
 let crabBurrowing = false, burrowTimer = 0, burrowCooldown = 0;
 
+// ── CRAB SHIELD ─────────────────────────────────────────
+const _shieldMesh = new THREE.Mesh(
+  new THREE.BoxGeometry(3.6, 2.3, 0.28),
+  new THREE.MeshStandardMaterial({ color: 0x4488ff, transparent: true, opacity: 0.55, emissive: 0x2255cc, emissiveIntensity: 0.9, side: THREE.DoubleSide })
+);
+_shieldMesh.visible = false;
+scene.add(_shieldMesh);
+let _shieldTimer = 0, _shieldCooldown = 0;
+
+// ── BIRD TRAIL ───────────────────────────────────────────
+const _TRAIL_SEGS = 16;
+const _trailHistPts = [];
+for (let _ti = 0; _ti < _TRAIL_SEGS; _ti++) _trailHistPts.push(new THREE.Vector3());
+const _trailBuf = new Float32Array(_TRAIL_SEGS * 3);
+const _trailGeo = new THREE.BufferGeometry();
+_trailGeo.setAttribute('position', new THREE.BufferAttribute(_trailBuf, 3));
+const _trailMat = new THREE.LineBasicMaterial({ color: 0x00b3ff, transparent: true, opacity: 0.55 });
+const _trailLine = new THREE.Line(_trailGeo, _trailMat);
+_trailLine.visible = false;
+scene.add(_trailLine);
+
+// ── MAGNET BEAM ──────────────────────────────────────────
+const _MAG_BEAM_MAX = 12;
+const _magBeamBuf = new Float32Array(_MAG_BEAM_MAX * 6);
+const _magBeamGeo = new THREE.BufferGeometry();
+_magBeamGeo.setAttribute('position', new THREE.BufferAttribute(_magBeamBuf, 3));
+const _magBeamLine = new THREE.LineSegments(_magBeamGeo,
+  new THREE.LineBasicMaterial({ color: 0xff00cc, transparent: true, opacity: 0.4 }));
+_magBeamLine.visible = false;
+scene.add(_magBeamLine);
+
+// ── SCORE POP ───────────────────────────────────────────
+function showScorePop(text, sx, sy, color) {
+  const el = document.createElement('div');
+  el.className = 'score-pop';
+  el.textContent = text;
+  el.style.left = sx + 'px'; el.style.top = sy + 'px';
+  el.style.color = color || '#ffee44';
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 900);
+}
+let _prevScore = 0;
+
 // ── GAME LOOP ───────────────────────────────────────────
 let _frameCount = 0;
 function animate() {
@@ -2720,6 +2779,19 @@ function animate() {
     eggCooldown = Math.max(0, eggCooldown - dt);
     dashCooldown = Math.max(0, dashCooldown - dt);
     if (burrowCooldown > 0) burrowCooldown -= dt;
+    if (_shieldCooldown > 0) _shieldCooldown -= dt;
+    if (_shieldTimer > 0) {
+      _shieldTimer -= dt;
+      const _gy2 = terrainY(player.mesh.position.x, player.mesh.position.z);
+      _shieldMesh.position.set(
+        player.mesh.position.x - Math.sin(duckYaw) * 3.2,
+        _gy2 + 1.15,
+        player.mesh.position.z - Math.cos(duckYaw) * 3.2
+      );
+      _shieldMesh.rotation.y = duckYaw;
+      _shieldMesh.material.opacity = 0.4 + Math.sin(Date.now() * 0.006) * 0.15;
+      if (_shieldTimer <= 0) { _shieldMesh.visible = false; _shieldCooldown = 10.0; showZoneFlash('shield gone', '#3366aa'); }
+    }
     if (crabBurrowing) {
       burrowTimer -= dt;
       player.mesh.position.y = terrainY(player.mesh.position.x, player.mesh.position.z) - 0.8;
@@ -2986,6 +3058,42 @@ function animate() {
     ghostMeshes[i].visible = showGhosts;
     ghostMeshes[i].position.copy(ghostPositions[i]);
   }
+
+  // ── BIRD TRAIL RIBBON ────────────────────────────────
+  if (playerRole === 'bird' && !spectatorMode) {
+    for (let _ti = _TRAIL_SEGS - 1; _ti > 0; _ti--) _trailHistPts[_ti].copy(_trailHistPts[_ti - 1]);
+    _trailHistPts[0].copy(player.mesh.position);
+    const _showTrail = player.speed > 6;
+    _trailLine.visible = _showTrail;
+    if (_showTrail) {
+      _trailMat.color.setHex(player.color);
+      for (let _ti = 0; _ti < _TRAIL_SEGS; _ti++) {
+        _trailBuf[_ti*3] = _trailHistPts[_ti].x;
+        _trailBuf[_ti*3+1] = _trailHistPts[_ti].y;
+        _trailBuf[_ti*3+2] = _trailHistPts[_ti].z;
+      }
+      _trailGeo.attributes.position.needsUpdate = true;
+    }
+  } else { _trailLine.visible = false; }
+
+  // ── MAGNET BEAM ──────────────────────────────────────
+  if (_magnetTimer > 0 && player.mesh) {
+    let _bPairs = 0;
+    for (let _gi = 0; _gi < gems.length && _bPairs < _MAG_BEAM_MAX; _gi++) {
+      const _g = gems[_gi];
+      if (!_g.active) continue;
+      if (player.mesh.position.distanceTo(_g.mesh.position) < 18) {
+        const _bb = _bPairs * 6;
+        _magBeamBuf[_bb]   = _g.mesh.position.x; _magBeamBuf[_bb+1] = _g.mesh.position.y; _magBeamBuf[_bb+2] = _g.mesh.position.z;
+        _magBeamBuf[_bb+3] = player.mesh.position.x; _magBeamBuf[_bb+4] = player.mesh.position.y; _magBeamBuf[_bb+5] = player.mesh.position.z;
+        _bPairs++;
+      }
+    }
+    _magBeamGeo.setDrawRange(0, _bPairs * 2);
+    _magBeamGeo.attributes.position.needsUpdate = true;
+    _magBeamLine.visible = _bPairs > 0;
+    _magBeamLine.material.opacity = 0.22 + Math.sin(time * 7) * 0.12;
+  } else { _magBeamLine.visible = false; }
 
   // ── ORBIT GEMS VISUAL ───────────────────────────────
   for (let oi = 0; oi < orbitGems.length; oi++) {
