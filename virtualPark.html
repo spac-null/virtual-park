@@ -2111,6 +2111,7 @@ function triggerWin(winnerName) {
   const isMe = winnerName === playerName;
   showZoneFlash(isMe ? '🏆 YOU WIN!' : winnerName + ' WINS!', isMe ? '#22cc44' : '#ff8800');
   if (isMe) playWin();
+  launchFireworks(isMe);
   timerEl.style.display = 'none';
   // Reset after 5s
   setTimeout(() => {
@@ -2124,6 +2125,20 @@ function triggerWin(winnerName) {
     for (const id in remotePlayers) remotePlayers[id].score = 0;
     roundInProgress = true;
   }, 5000);
+}
+
+function launchFireworks(isMe) {
+  const _fwColors = [0xff4444, 0x44ff88, 0xffee00, 0xff00cc, 0x00ccff, 0xff8800, 0xffffff];
+  const _bursts = isMe ? 8 : 4;
+  for (let _fi = 0; _fi < _bursts; _fi++) {
+    setTimeout(() => {
+      const _fx = rand(-50, 50), _fz = rand(-50, 50), _fy = rand(28, 65);
+      const _c1 = _fwColors[Math.floor(Math.random() * _fwColors.length)];
+      const _c2 = _fwColors[Math.floor(Math.random() * _fwColors.length)];
+      burstParticles(new THREE.Vector3(_fx, _fy, _fz), _c1);
+      burstParticles(new THREE.Vector3(_fx + rand(-6, 6), _fy + rand(-4, 4), _fz + rand(-6, 6)), _c2);
+    }, _fi * 380);
+  }
 }
 
 let _onlineHudCount = -1, _onlineHudConnected = null;
@@ -2685,6 +2700,17 @@ function showScorePop(text, sx, sy, color) {
 }
 let _prevScore = 0;
 
+// ── GEM COMBO ───────────────────────────────────────────
+let _comboTimer = 0, _comboCount = 0;
+
+// ── WIND ZONES ──────────────────────────────────────────
+const _windZones = [
+  { cx: 32, cz: -42, r: 22, fx: -9, fz: 4 },
+  { cx: -38, cz: 28, r: 18, fx: 5, fz: 10 },
+  { cx: 8, cz: 52, r: 20, fx: -7, fz: -8 },
+];
+let _inWind = false, _wasInWind = false;
+
 // ── GAME LOOP ───────────────────────────────────────────
 let _frameCount = 0;
 function animate() {
@@ -2890,6 +2916,24 @@ function animate() {
   player.vel.y += player.facing.y * player.speed * 1.8 * dt;  // pitch = vertical thrust
   player.vel.z += player.facing.z * player.speed * 2.5 * dt;
 
+  // ── WIND ZONES ────────────────────────────────────────
+  _inWind = false;
+  if (!player.landed) {
+    for (let _wi = 0; _wi < _windZones.length; _wi++) {
+      const _wz = _windZones[_wi];
+      const _wdx = player.mesh.position.x - _wz.cx, _wdz = player.mesh.position.z - _wz.cz;
+      const _wdist = Math.sqrt(_wdx * _wdx + _wdz * _wdz);
+      if (_wdist < _wz.r) {
+        const _wf = (1 - _wdist / _wz.r) * 1.4;
+        player.vel.x += _wz.fx * _wf * dt;
+        player.vel.z += _wz.fz * _wf * dt;
+        _inWind = true;
+      }
+    }
+  }
+  if (_inWind && !_wasInWind) showZoneFlash('💨 CROSSWIND', '#88ccff');
+  _wasInWind = _inWind;
+
   // drag (all axes)
   player.vel.x *= (1 - 1.6 * dt);
   player.vel.z *= (1 - 1.6 * dt);
@@ -3048,6 +3092,15 @@ function animate() {
     lwo.rotation.y = lerp(lwo.rotation.y, tgtSweep, 5 * dt);
     rwo.rotation.y = lerp(rwo.rotation.y, -tgtSweep, 5 * dt);
   }
+  }
+
+  // FOV speed pulse (bird, desktop only)
+  if (playerRole !== 'duck' && !isMobileDevice()) {
+    const _tgtFov = player.speed > 20 ? 75 + (player.speed - 20) * 0.65 : 75;
+    if (Math.abs(camera.fov - _tgtFov) > 0.15) {
+      camera.fov = lerp(camera.fov, _tgtFov, dt * 4);
+      camera.updateProjectionMatrix();
+    }
   }
 
   // ghost trail
@@ -3220,6 +3273,17 @@ function animate() {
       player.gems++;
       burstParticles(g.mesh.position.clone(), gt.color);
       playGemCollect(gt.freq, g.mesh.position.x, g.mesh.position.y, g.mesh.position.z);
+
+      // combo
+      _comboTimer = 5.0;
+      _comboCount++;
+      if (_comboCount >= 3) {
+        const _cBonus = _comboCount - 2;
+        nestState.carried += _cBonus;
+        player.score = nestState.banked + nestState.carried;
+        showScorePop('+' + _cBonus + ' ×' + _comboCount + '!', window.innerWidth / 2, window.innerHeight * 0.38, '#ffcc00');
+        showZoneFlash('COMBO ×' + _comboCount, '#ffcc00');
+      }
 
       g.active = false;
       g.mesh.visible = false;
@@ -3408,6 +3472,9 @@ function animate() {
   if (windGain && _rainIntensity > 0.1) {
     windGain.gain.value = Math.max(windGain.gain.value, _rainIntensity * 0.05);
   }
+
+  // ── COMBO TIMER (role-independent) ──────────────────
+  if (_comboTimer > 0) { _comboTimer -= dt; if (_comboTimer <= 0) _comboCount = 0; }
 
   // ── ROUND TIMER ─────────────────────────────────────
   if (roundInProgress && playerRole) {
