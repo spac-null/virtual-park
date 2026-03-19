@@ -3770,11 +3770,11 @@ function animate() {
     const yaw = player.mesh.rotation.y;
     const _mCamBack = player.landed ? 9 : 13;
     const _mCamUp   = player.landed ? 8 : 3;
-    camera.position.set(
-      player.mesh.position.x + Math.sin(yaw) * _mCamBack,
-      player.mesh.position.y + _mCamUp,
-      player.mesh.position.z + Math.cos(yaw) * _mCamBack
-    );
+    const _mCamX = player.mesh.position.x + Math.sin(yaw) * _mCamBack;
+    const _mCamZ = player.mesh.position.z + Math.cos(yaw) * _mCamBack;
+    // clamp camera above terrain+trees at its back position — prevents occlusion by hills & canopy
+    const _mCamY = Math.max(player.mesh.position.y + _mCamUp, terrainY(_mCamX, _mCamZ) + 10);
+    camera.position.set(_mCamX, _mCamY, _mCamZ);
     _tv1.copy(player.mesh.position);
     _tv1.y += 1.5;
     camera.lookAt(_tv1);
