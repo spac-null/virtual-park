@@ -175,6 +175,7 @@ canvas{display:block;cursor:none;position:fixed;top:0;left:0}
     <tr><td>C</td><td>jump (crab)</td></tr>
     <tr><td>F</td><td>burrow — 1.8s invincible (crab, 8s cd)</td></tr>
     <tr><td>G</td><td>shield wall — 3s block + invincible (crab, 10s cd)</td></tr>
+    <tr><td>N</td><td>night vision — green light 10s (crab, 20s cd)</td></tr>
     <tr><td>X</td><td>grappling hook — pull toward point (crab, 7s cd)</td></tr>
     <tr><td>W+W</td><td>dash forward (crab)</td></tr>
     <tr><td>R</td><td>respawn (if stuck)</td></tr>
@@ -2039,6 +2040,10 @@ window.addEventListener('keydown', e => {
   }
   if (e.key === 'Escape' && playerRole) { escMenuOpen ? closeEscMenu() : openEscMenu(); }
   if (e.code === 'KeyC' && playerRole === 'duck' && crabJumpVel === 0) { initAudio(); crabJumpVel = 9; player.mesh.position.y += 0.3; playFlap(); }
+  if (e.code === 'KeyN' && playerRole === 'duck') {
+    if (_nvgTimer > 0) { _nvgTimer = 0.01; }
+    else if (_nvgCooldown <= 0) { initAudio(); _nvgTimer = 10.0; showZoneFlash('🟩 NVG ON', '#00ff55'); }
+  }
   if (e.code === 'KeyX' && playerRole === 'duck') {
     if (_hookActive) {
       _hookActive = false; _hookAnchored = false;
@@ -2259,6 +2264,7 @@ function updateHUD(dt) {
   const ry = -player.mesh.rotation.y;
 
   // gem dots on radar
+  const _magPulse = _magnetTimer > 0 ? (0.5 + Math.abs(Math.sin(Date.now() * 0.007)) * 0.5) : 1;
   for (let gi = 0; gi < gems.length; gi++) {
     const g = gems[gi];
     if (!g.active) continue;
@@ -2268,8 +2274,11 @@ function updateHUD(dt) {
     const rx = dx * Math.cos(ry) - dz * Math.sin(ry);
     const rz = dx * Math.sin(ry) + dz * Math.cos(ry);
     const sx = 41 + rx / 30 * 38, sy = 41 + rz / 30 * 38;
+    radarCtx.globalAlpha = _magPulse;
     radarCtx.fillStyle = '#' + CFG.gemTypes[g.type].color.toString(16).padStart(6, '0');
-    radarCtx.fillRect(sx - 2, sy - 2, 4, 4);
+    const _grs = _magnetTimer > 0 ? 3 : 2;
+    radarCtx.fillRect(sx - _grs, sy - _grs, _grs * 2, _grs * 2);
+    radarCtx.globalAlpha = 1;
   }
 
   // player dots on radar — real players in their color, NPCs grey
@@ -2308,6 +2317,7 @@ function updateHUD(dt) {
 
   // scoreboard — only rebuild when visible
   if (document.getElementById('scoreboard').classList.contains('visible')) {
+    allPlayers.sort((a, b) => b.score - a.score);
     let sbHTML = '';
     allPlayers.forEach((p, i) => {
       sbHTML += '<tr class="' + (p.me ? 'you' : '') + '"><td>' + (i + 1) + '</td><td>' + p.name + '</td><td>' + p.score + '</td></tr>';
@@ -2518,12 +2528,18 @@ function onPlayerHit(fromName, hitType) {
     for (let _di = 0; _di < _dc; _di++) spawnDropGem(player.mesh.position.clone());
     player.gems = 0; nestState.carried = 0; updateNestHUD();
   }
-  player.mesh.position.set(rand(-8, 8), CFG.spawnY, rand(-8, 8));
+  if (_hasHookAnchor && playerRole === 'duck') {
+    player.mesh.position.set(_lastHookAnchor.x, _lastHookAnchor.y + 1.2, _lastHookAnchor.z);
+    _hasHookAnchor = false;
+    showZoneFlash('🪝 respawn at hook — ' + player.lives + ' ♥ left', '#88ffcc');
+  } else {
+    player.mesh.position.set(rand(-8, 8), CFG.spawnY, rand(-8, 8));
+    showZoneFlash('respawn — ' + player.lives + ' ♥ left', '#4ade80');
+  }
   player.vel.set(0, 0, 0);
   player.bankAngle = 0;
   player.invincible = 2.0;
   camState.smoothPos.copy(player.mesh.position);
-  showZoneFlash('respawn — ' + player.lives + ' ♥ left', '#4ade80');
 }
 
 function showGameOver(killerName) {
@@ -2724,6 +2740,7 @@ const _trailGeo = new THREE.BufferGeometry();
 _trailGeo.setAttribute('position', new THREE.BufferAttribute(_trailBuf, 3));
 const _trailMat = new THREE.LineBasicMaterial({ color: 0x00b3ff, transparent: true, opacity: 0.55 });
 const _trailLine = new THREE.Line(_trailGeo, _trailMat);
+const _trailC1 = new THREE.Color(), _trailC2 = new THREE.Color(0xff2200);
 _trailLine.visible = false;
 scene.add(_trailLine);
 
@@ -2748,6 +2765,18 @@ function showScorePop(text, sx, sy, color) {
   setTimeout(() => el.remove(), 900);
 }
 let _prevScore = 0;
+
+// ── NIGHT VISION GOGGLES ────────────────────────────────
+const _nvgLight = new THREE.PointLight(0x00ff55, 0, 38);
+scene.add(_nvgLight);
+let _nvgTimer = 0, _nvgCooldown = 0;
+const _nvgHud = document.createElement('div');
+_nvgHud.style.cssText = 'position:absolute;top:50%;left:14px;transform:translateY(-50%);z-index:12;pointer-events:none;font-family:"Courier New",monospace;font-size:11px;font-weight:bold;color:#00ff55;background:rgba(0,20,0,0.88);border:1px solid rgba(0,255,85,0.4);border-radius:5px;padding:3px 12px;display:none;letter-spacing:2px;';
+document.body.appendChild(_nvgHud);
+
+// ── HOOK ANCHOR RESPAWN ──────────────────────────────────
+const _lastHookAnchor = new THREE.Vector3();
+let _hasHookAnchor = false;
 
 // ── GRAPPLING HOOK ──────────────────────────────────────
 const _hookLineBuf = new Float32Array(6);
@@ -2897,6 +2926,20 @@ function animate() {
         showZoneFlash('EMERGED!', '#aacc44');
       }
     }
+    // ── NIGHT VISION ──────────────────────────────────
+    if (_nvgCooldown > 0) _nvgCooldown -= dt;
+    if (_nvgTimer > 0) {
+      _nvgTimer -= dt;
+      _nvgLight.position.copy(player.mesh.position);
+      _nvgLight.intensity = 16 + Math.sin(Date.now() * 0.003) * 1.5;
+      _nvgHud.textContent = '◈ NVG  ' + Math.ceil(Math.max(0, _nvgTimer)) + 's';
+      _nvgHud.style.display = 'block';
+      if (_nvgTimer <= 0) {
+        _nvgLight.intensity = 0; _nvgHud.style.display = 'none';
+        _nvgCooldown = 20; showZoneFlash('NVG OFF', '#004422');
+      }
+    } else { _nvgLight.intensity = 0; _nvgHud.style.display = 'none'; }
+
     // ── GRAPPLING HOOK PHYSICS ─────────────────────────
     if (_hookCooldown > 0) _hookCooldown -= dt;
     if (_hookActive) {
@@ -2907,6 +2950,7 @@ function animate() {
         if (_hookProjPos.y <= _hty + 0.4 || _hDist > 44) {
           if (_hookProjPos.y <= _hty + 0.4) _hookProjPos.y = _hty + 0.4;
           _hookPos.copy(_hookProjPos);
+          _lastHookAnchor.copy(_hookPos); _hasHookAnchor = true;
           _hookAnchored = true; _hookPullTimer = 2.0;
           if (audioCtx) {
             const _ht = audioCtx.currentTime;
@@ -3228,7 +3272,9 @@ function animate() {
     const _showTrail = player.speed > 6;
     _trailLine.visible = _showTrail;
     if (_showTrail) {
-      _trailMat.color.setHex(player.color);
+      const _tSpd = clamp((player.speed - 20) / 12, 0, 1);
+      _trailC1.setHex(player.color);
+      _trailMat.color.copy(_tSpd > 0 ? _trailC1.lerp(_trailC2, _tSpd) : _trailC1);
       for (let _ti = 0; _ti < _TRAIL_SEGS; _ti++) {
         _trailBuf[_ti*3] = _trailHistPts[_ti].x;
         _trailBuf[_ti*3+1] = _trailHistPts[_ti].y;
