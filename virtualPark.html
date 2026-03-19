@@ -3515,7 +3515,7 @@ function animate() {
 
   // terrain collision — always clamp, strong damping on contact
   const groundY = terrainY(player.mesh.position.x, player.mesh.position.z);
-  const floorY = groundY + 0.7;
+  const floorY = groundY + 0.5;  // match crab ground level
   if (player.mesh.position.y <= floorY + 0.05) {
     player.mesh.position.y = floorY;
     player.vel.x = 0; player.vel.z = 0; player.vel.y = 0;
