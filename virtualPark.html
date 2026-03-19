@@ -48,6 +48,11 @@ canvas{display:block;cursor:none;position:fixed;top:0;left:0}
 #gem-radar{position:absolute;bottom:14px;left:14px;width:82px;height:82px;z-index:10;pointer-events:none}
 #gem-radar canvas{border-radius:50%;border:1px solid rgba(0,100,200,0.2)}
 
+#chat-input-overlay{display:none;position:fixed;bottom:0;left:0;width:100%;z-index:50;background:rgba(10,10,30,0.92);padding:10px 12px;flex-direction:row;gap:8px;align-items:center}
+#chat-input-overlay input{flex:1;font-family:'Courier New',monospace;font-size:15px;padding:8px 12px;border:1px solid rgba(100,160,255,0.4);border-radius:6px;background:rgba(255,255,255,0.05);color:#fff;outline:none}
+#chat-input-overlay button{font-family:'Courier New',monospace;font-size:13px;padding:8px 14px;border:none;border-radius:6px;cursor:pointer;font-weight:bold}
+#chat-send{background:#0055cc;color:#fff}
+#chat-cancel{background:rgba(255,255,255,0.12);color:#aaa}
 #zone-flash{position:absolute;top:36%;left:50%;transform:translate(-50%,-50%);z-index:15;font-size:20px;font-weight:bold;letter-spacing:3px;opacity:0;transition:opacity 0.15s;pointer-events:none;text-shadow:0 1px 6px rgba(0,0,0,0.2)}
 #zone-flash.show{opacity:1}
 
@@ -129,6 +134,12 @@ canvas{display:block;cursor:none;position:fixed;top:0;left:0}
 <div id="gem-radar"><canvas id="radar-canvas" width="82" height="82"></canvas></div>
 
 <div id="zone-flash"></div>
+
+<div id="chat-input-overlay">
+  <input id="chat-input-field" type="text" maxlength="100" placeholder="drop a message…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+  <button id="chat-send">SEND</button>
+  <button id="chat-cancel">✕</button>
+</div>
 
 
 <div id="game-over">
@@ -581,14 +592,39 @@ function createBirdMesh(color) {
   group.userData.leftWing = lw;
   group.userData.rightWing = rw;
 
-  // tail — single chunky block
+  // tail — fan of 3 feather blocks
   const tailG = new THREE.Group();
-  const t = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.15, 0.6), bodyMat);
-  t.position.set(0, 0, -0.3);
-  tailG.add(t);
-  tailG.position.set(0, 0.05, -0.9);
+  const tCenter = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.12, 0.52), bodyMat);
+  tCenter.position.set(0, 0, -0.32);
+  tailG.add(tCenter);
+  const tLeft = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.09, 0.42), bodyMat);
+  tLeft.position.set(-0.3, 0, -0.22); tLeft.rotation.y = 0.4;
+  tailG.add(tLeft);
+  const tRight = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.09, 0.42), bodyMat);
+  tRight.position.set(0.3, 0, -0.22); tRight.rotation.y = -0.4;
+  tailG.add(tRight);
+  tailG.position.set(0, 0.04, -0.9);
   group.add(tailG);
   group.userData.tail = tailG;
+
+  // feet — amber talons below body
+  [-0.22, 0.22].forEach(fx => {
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, 0.28), beakMat);
+    foot.position.set(fx, -0.46, 0.08);
+    group.add(foot);
+    const toe = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 0.2), beakMat);
+    toe.position.set(fx, -0.5, 0.28);
+    group.add(toe);
+  });
+
+  // crown tuft — two-piece puff above head
+  const crownMat = new THREE.MeshLambertMaterial({ color: bc.clone().lerp(new THREE.Color(0xffffff), 0.55), flatShading: true });
+  const crownBase = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.18, 0.14), crownMat);
+  crownBase.position.set(0, 0.975, 0.86);
+  group.add(crownBase);
+  const crownTip = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.16, 0.09), crownMat);
+  crownTip.position.set(0, 1.14, 0.84);
+  group.add(crownTip);
 
   // Wrap in pivot so head faces movement direction
   const pivot = new THREE.Group();
@@ -615,27 +651,51 @@ function createCrabMesh(color) {
   g.add(body);
   g.userData.body = body;
 
-  // big claws — left and right, angled slightly outward
+  // carapace ridges — 3 raised strips across the shell
+  const ridgeMat = new THREE.MeshLambertMaterial({ color: 0xff5500, flatShading: true });
+  [0.22, -0.08, -0.42].forEach(rz => {
+    const ridge = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.1, 0.13), ridgeMat);
+    ridge.position.set(0, 0.3, rz);
+    g.add(ridge);
+  });
+
+  // claws — left (side=-1) and right (side=1) with animated pincer pivots
   [-1, 1].forEach(side => {
     const clawGroup = new THREE.Group();
-    // upper claw arm
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.28, 0.32), clawMat);
-    arm.position.set(side * 0.3, 0, 0);
+    // arm
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.28, 0.34), clawMat);
+    arm.position.set(side * 0.35, 0, 0);
     clawGroup.add(arm);
-    // claw pincer top
-    const pinTop = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.14, 0.28), clawMat);
-    pinTop.position.set(side * 0.18, 0.12, 0);
-    clawGroup.add(pinTop);
-    // claw pincer bottom
-    const pinBot = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.14, 0.28), clawMat);
-    pinBot.position.set(side * 0.18, -0.12, 0);
-    clawGroup.add(pinBot);
+    // knuckle at arm tip
+    const knuckle = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), clawMat);
+    knuckle.position.set(side * 0.86, 0.02, 0);
+    clawGroup.add(knuckle);
+    // pincer pivots sit at knuckle — children rotate open/shut around that point
+    const pinTopPivot = new THREE.Group();
+    pinTopPivot.position.set(side * 0.86, 0, 0);
+    const pinTop = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.13, 0.28), clawMat);
+    pinTop.position.set(side * 0.28, 0.13, 0);
+    pinTopPivot.add(pinTop);
+    clawGroup.add(pinTopPivot);
+    const pinBotPivot = new THREE.Group();
+    pinBotPivot.position.set(side * 0.86, 0, 0);
+    const pinBot = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.13, 0.28), clawMat);
+    pinBot.position.set(side * 0.28, -0.13, 0);
+    pinBotPivot.add(pinBot);
+    clawGroup.add(pinBotPivot);
 
-    clawGroup.position.set(side * 1.55, 0.05, 0.2);
-    clawGroup.rotation.y = side * 0.28;
+    clawGroup.position.set(side * 1.62, 0.1, 0.25);
+    clawGroup.rotation.y = side * 0.3;
     g.add(clawGroup);
-    if (side === -1) g.userData.crabLeftClaw = clawGroup;
-    else g.userData.crabRightClaw = clawGroup;
+    if (side === -1) {
+      g.userData.crabLeftClaw = clawGroup;
+      g.userData.crabLeftPinTop = pinTopPivot;
+      g.userData.crabLeftPinBot = pinBotPivot;
+    } else {
+      g.userData.crabRightClaw = clawGroup;
+      g.userData.crabRightPinTop = pinTopPivot;
+      g.userData.crabRightPinBot = pinBotPivot;
+    }
   });
 
   // eye stalks (top of body, two small cylinders with sphere tips)
@@ -824,15 +884,38 @@ addTouchBtn('mobile-hover',() => { hoverMode = !hoverMode; });
 addTouchBtn('mobile-jump', () => { initAudio(); if (playerRole === 'duck' && crabJumpVel === 0) { crabJumpVel = 9; player.mesh.position.y += 0.3; playFlap(); } });
 addTouchBtn('mobile-fire', () => { initAudio(); fireBarooka(); });
 addTouchBtn('mobile-rocket',() => { initAudio(); fireRocket(); });
+// ── CHAT OVERLAY (replaces prompt() on all devices) ─────
+const _chatOverlay = document.getElementById('chat-input-overlay');
+const _chatField   = document.getElementById('chat-input-field');
+const _chatSend    = document.getElementById('chat-send');
+const _chatCancel  = document.getElementById('chat-cancel');
+
+function openChatOverlay() {
+  if (tracePrompt) return;
+  tracePrompt = true;
+  _chatField.value = '';
+  _chatOverlay.style.display = 'flex';
+  setTimeout(() => _chatField.focus(), 80);
+}
+function closeChatOverlay(send) {
+  const txt = _chatField.value.trim();
+  _chatOverlay.style.display = 'none';
+  tracePrompt = false;
+  if (send && txt) sendTrace(txt);
+}
+_chatSend.addEventListener('click', () => closeChatOverlay(true));
+_chatCancel.addEventListener('click', () => closeChatOverlay(false));
+_chatField.addEventListener('keydown', e => {
+  if (e.key === 'Enter') closeChatOverlay(true);
+  if (e.key === 'Escape') closeChatOverlay(false);
+  e.stopPropagation();
+});
+
 const chatBtn = document.getElementById('mobile-chat');
 if (chatBtn) {
   chatBtn.addEventListener('touchstart', e => {
     e.preventDefault();
-    if (tracePrompt) return;
-    tracePrompt = true;
-    const t = prompt('message:');
-    tracePrompt = false;
-    if (t && t.trim()) sendTrace(t.trim());
+    openChatOverlay();
   });
 }
 
@@ -1095,7 +1178,8 @@ function updateProjectiles(dt) {
       for (const id in remotePlayers) {
         if (p.mesh.position.distanceTo(remotePlayers[id].mesh.position) < hr) {
           const pts = p.isRocket ? 3 : 2;
-          player.score += pts; player.score = Math.min(player.score, 999);
+          nestState.banked += pts;
+          player.score = Math.min(nestState.banked + nestState.carried, 999);
           showZoneFlash(p.isRocket ? '+3 ROCKET HIT! 🚀' : '+2 DIRECT HIT!', '#ff4400');
           if (p.isRocket) explode(p.mesh.position.clone(), 2.0);
           if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'hit', targetId: id, fromName: playerName }));
@@ -1142,6 +1226,7 @@ function updateEggs(dt) {
         e.vel.y = Math.abs(e.vel.y) * 0.42;
         e.vel.x *= 0.5; e.vel.z *= 0.5;
         e.mesh.position.y = gY + 0.35;
+        playBump();
       } else {
         explode(e.mesh.position.clone(), 1.8);
         scene.remove(e.mesh); e.mesh.traverse(c => { if (c.isMesh) { c.geometry.dispose(); c.material.dispose(); } }); eggs.splice(i, 1); continue;
@@ -1292,15 +1377,21 @@ const npcColors = [0x8B6914, 0x6B3A2E, 0x4A5568, 0x5C4033, 0x7B6B4F, 0x3D4F5F, 0
 
 for (let i = 0; i < CFG.npcCount; i++) {
   const a = rand(0, Math.PI * 2), r = rand(20, 55);
-  const mat = new THREE.MeshStandardMaterial({ color: npcColors[i], roughness: 0.8 });
+  const mat = new THREE.MeshLambertMaterial({ color: npcColors[i], flatShading: true });
+  const hc = new THREE.Color(npcColors[i]).lerp(new THREE.Color(0xffffff), 0.22);
+  const hmat = new THREE.MeshLambertMaterial({ color: hc, flatShading: true });
 
   const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.4, 1.2), mat);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.38, 1.1), mat);
   body.castShadow = true; g.add(body);
-  const lw = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.08, 0.5), mat);
-  lw.position.set(-0.8, 0, 0); g.add(lw);
-  const rw = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.08, 0.5), mat);
-  rw.position.set(0.8, 0, 0); g.add(rw);
+  const lw = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.07, 0.44), mat);
+  lw.position.set(-0.75, 0, 0); g.add(lw);
+  const rw = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.07, 0.44), mat);
+  rw.position.set(0.75, 0, 0); g.add(rw);
+  const nhead = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.38, 0.42), hmat);
+  nhead.position.set(0, 0.2, 0.62); g.add(nhead);
+  const nbeak = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.1, 0.24), new THREE.MeshLambertMaterial({ color: 0xf59e0b, flatShading: true }));
+  nbeak.position.set(0, 0.12, 0.86); g.add(nbeak);
 
   const pos = new THREE.Vector3(Math.cos(a) * r, rand(18, 42), Math.sin(a) * r);
   g.position.copy(pos);
@@ -1341,7 +1432,7 @@ function updateNPCs(dt) {
     // scatter from player (stronger)
     _boidVec.copy(b.pos).sub(pp);
     const pDist = _boidVec.length();
-    if (pDist < 10) b.vel.addScaledVector(_boidVec.normalize(), (5 / Math.max(pDist, 1)) * dt * 8);
+    if (pDist < 10) b.vel.addScaledVector(_boidVec.normalize(), (5 / Math.max(pDist, 2.5)) * dt * 8);
 
     // chase nearest active gem occasionally (every 3rd NPC, adds competition)
     if (i % 3 === 0) {
@@ -1730,10 +1821,7 @@ function sendTrace(text) {
 let tracePrompt = false;
 window.addEventListener('keydown', e => {
   if ((e.key === 't' || e.key === 'T') && !tracePrompt) {
-    tracePrompt = true;
-    const t = prompt('Drop a message:');
-    if (t) sendTrace(t);
-    tracePrompt = false;
+    openChatOverlay();
   }
   if (e.key === 'm' || e.key === 'M') toggleMsgLog();
   // R = emergency respawn (if stuck at wall or anything else)
@@ -1943,7 +2031,8 @@ function updateRemotePlayers(dt) {
   const projVec = _projVec;
   for (const id in remotePlayers) {
     const rp = remotePlayers[id];
-    rp.mesh.position.lerp(rp.targetPos, 6 * dt);
+    const _rpd = rp.mesh.position.distanceTo(rp.targetPos);
+    rp.mesh.position.lerp(rp.targetPos, Math.min(1, Math.max(6, _rpd * 4) * dt));
     rp.mesh.rotation.y = lerp(rp.mesh.rotation.y, rp.targetRotY, 6 * dt);
     rp.wingPhase += dt * 4;
     const wa = Math.sin(rp.wingPhase) * 0.2;
@@ -2039,8 +2128,11 @@ function startGame(role) {
     // show joystick + chat
     show('mobile-joy');
     show('mobile-chat');
-    // hide desktop-only elements that overlap mobile controls
-    hide('gem-radar');
+    // reposition radar to top-right on mobile (small, out of joystick area)
+    const _radar = document.getElementById('gem-radar');
+    if (_radar) { _radar.style.bottom=''; _radar.style.top='48px'; _radar.style.left=''; _radar.style.right='14px'; _radar.style.width='60px'; _radar.style.height='60px'; }
+    const _radarC = document.getElementById('radar-canvas');
+    if (_radarC) { _radarC.width=60; _radarC.height=60; }
     hide('speed-dots');
     hide('alt-bar');
     hide('hint');
@@ -2239,11 +2331,23 @@ function animate() {
     player.mesh.rotation.z = lerp(player.mesh.rotation.z, duckMoving ? targetLean : 0, 6 * dt);
     // Animate crab legs when moving
     if (player.mesh.userData.legs) {
-      const legSpeed = duckMoving ? 8 : 0;
       player.mesh.userData.legs.forEach(l => {
-        const swing = duckMoving ? Math.sin(time * legSpeed + l.phase) * 0.3 : 0;
+        const swing = duckMoving ? Math.sin(time * 8 + l.phase) * 0.3 : 0;
         l.group.rotation.z = swing * l.side;
       });
+    }
+    // Animate claw pincers — right snaps on fire, both idle-breathe
+    const _ud = player.mesh.userData;
+    if (_ud.crabRightPinTop) {
+      const _fired = bazookaCooldown > 0.55;
+      // right claw (side=1): +z=open, -z=snap shut
+      const _rAng = _fired ? -0.32 : Math.sin(time * 1.3) * 0.07 + 0.22;
+      _ud.crabRightPinTop.rotation.z = lerp(_ud.crabRightPinTop.rotation.z, _rAng, (_fired ? 18 : 3.5) * dt);
+      _ud.crabRightPinBot.rotation.z = lerp(_ud.crabRightPinBot.rotation.z, -_rAng, (_fired ? 18 : 3.5) * dt);
+      // left claw (side=-1): -z=open, +z=snap shut (mirrored)
+      const _lAng = -(Math.sin(time * 1.1 + 1.1) * 0.06 + 0.2);
+      _ud.crabLeftPinTop.rotation.z = lerp(_ud.crabLeftPinTop.rotation.z, _lAng, 3.5 * dt);
+      _ud.crabLeftPinBot.rotation.z = lerp(_ud.crabLeftPinBot.rotation.z, -_lAng, 3.5 * dt);
     }
     bazookaCooldown = Math.max(0, bazookaCooldown - dt);
     eggCooldown = Math.max(0, eggCooldown - dt);
@@ -2439,7 +2543,8 @@ function animate() {
     for (const id in remotePlayers) {
       if (remotePlayers[id].role !== 'duck') continue;
       if (player.mesh.position.distanceTo(remotePlayers[id].mesh.position) < 5.5) {
-        player.score += 2;
+        nestState.banked += 2;
+        player.score = nestState.banked + nestState.carried;
         showZoneFlash('🦅 DIVE-BOMB! +2', '#ffaa00');
         if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'hit', targetId: id, fromName: playerName }));
         divebombCooldown = 3.0;
@@ -2467,7 +2572,8 @@ function animate() {
   if (playerRole !== 'duck') {
   if (player.flapAnim > 0) {
     player.flapAnim -= dt;
-    const wa = Math.sin(time * 50) * 0.55;
+    const _ft = 1 - player.flapAnim / 0.25;
+    const wa = Math.sin(_ft * Math.PI) * 0.85;
     player.mesh.userData.leftWing.rotation.z = wa;
     player.mesh.userData.rightWing.rotation.z = -wa;
   } else {
@@ -2590,7 +2696,7 @@ function animate() {
     if (dist < (playerRole === 'duck' ? 5.0 : 3.0)) {
       const gt = CFG.gemTypes[g.type];
       nestState.carried += gt.points;
-      player.score = nestState.banked;
+      player.score = nestState.banked + nestState.carried;
       player.gems++;
       burstParticles(g.mesh.position.clone(), gt.color);
       playGemCollect(gt.freq);
@@ -2604,14 +2710,12 @@ function animate() {
       for (let ci = 0; ci < caveZones.length; ci++) {
         const cz = caveZones[ci];
         if (g.mesh.position.distanceTo(cz.center) < cz.len + 5) {
-          player.score += 1;
+          nestState.carried += 1;
+          player.score = nestState.banked + nestState.carried;
           showZoneFlash('CAVE BONUS!', '#ffd700');
           break;
         }
       }
-
-      // check win condition
-      if (player.score >= CFG.winScore) triggerWin(player.name);
 
       // respawn — faster for common, slower for epic
       const gemRef = g;
@@ -2639,7 +2743,8 @@ function animate() {
     const dy = Math.abs(pp.y - az.centerY);
     const dz = Math.abs(pp.z - az.center.z);
     if (dx < az.hw && dy < az.hh && dz < az.hd) {
-      player.score += 2;
+      nestState.carried += 2;
+      player.score = nestState.banked + nestState.carried;
       archCooldowns[ai] = 5;
       showZoneFlash('ARCH BONUS +2', '#4ade80');
       playArchBonus();
