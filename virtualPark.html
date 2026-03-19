@@ -103,7 +103,8 @@ canvas{display:block;cursor:none;position:fixed;top:0;left:0;touch-action:none}
 #title-screen canvas{position:absolute;top:0;left:0;width:100%;height:100%}
 #title-tap{position:absolute;bottom:max(env(safe-area-inset-bottom,0px) + 18px, 4%);left:0;width:100%;text-align:center;font-family:'Courier New',monospace;font-size:clamp(12px,3.5vw,16px);letter-spacing:4px;font-weight:bold;color:#fff;text-shadow:0 2px 0 #000,0 -1px 0 #000,1px 0 0 #000,-1px 0 0 #000,0 0 10px rgba(0,0,0,0.6);animation:blinktap 1.1s ease-in-out infinite}
 @keyframes blinktap{0%,100%{opacity:1}50%{opacity:0.2}}
-#char-select{position:absolute;top:0;left:0;width:100%;height:100%;background:linear-gradient(180deg,#4a90d9 0%,#7ec8f0 58%,#a8dba8 76%,#3d8a30 100%);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:50;font-family:'Courier New',monospace;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}
+#char-select{position:absolute;top:0;left:0;width:100%;height:100%;background:none;display:none;flex-direction:column;align-items:center;justify-content:center;z-index:50;font-family:'Courier New',monospace;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}
+#char-select>.cs-title,#char-select>.cs-sub,#char-select>#cs-name-input,#char-select>.cs-row{position:relative;z-index:1}
 .cs-title{font-size:clamp(20px,6vw,30px);color:#1565C0;letter-spacing:3px;margin-bottom:4px;font-weight:900;font-style:italic;font-family:Impact,"Arial Black",sans-serif;text-align:center;text-shadow:-2px -2px 0 #fff,2px -2px 0 #fff,-2px 2px 0 #fff,2px 2px 0 #fff,0 3px 0 rgba(0,0,0,0.3)}
 .cs-sub{font-size:11px;color:rgba(0,0,0,0.55);letter-spacing:4px;text-transform:uppercase;margin-bottom:18px;font-weight:bold}
 .cs-row{display:flex;gap:16px;width:100%;max-width:600px;padding:0 18px;box-sizing:border-box}
@@ -231,8 +232,8 @@ canvas{display:block;cursor:none;position:fixed;top:0;left:0;touch-action:none}
 </div>
 
 <div id="char-select" style="display:none">
-  <div class="cs-title">SIGN BOMB</div>
-  <div class="cs-sub">choose your creature</div>
+  <canvas id="cs-bg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none"></canvas>
+  <div class="cs-sub" style="margin-top:38%">choose your creature</div>
   <input id="cs-name-input" type="text" maxlength="20" placeholder="your name">
   <div class="cs-row">
     <button class="cs-btn" id="btn-bird">
@@ -835,100 +836,138 @@ function createCrabMesh(color) {
   return outer;
 }
 
-// ── CHAR SELECT PREVIEWS — 2D canvas, no layout issues ───
-function startCharPreviews() {
-  // Bird preview
-  (function() {
-    const cv = document.getElementById('preview-bird');
-    if (!cv) return;
-    const W=160,H=130,x=cv.getContext('2d');
-    const t0=performance.now();
-    function draw() {
-      if (document.getElementById('char-select')?.style.display==='none') return;
-      x.clearRect(0,0,W,H);
-      // sky bg
-      const bg=x.createLinearGradient(0,0,0,H);
-      bg.addColorStop(0,'#7ec8f0');bg.addColorStop(1,'#c8efc8');
-      x.fillStyle=bg;x.fillRect(0,0,W,H);
-      // animate rotation
-      const t=(performance.now()-t0)*0.001;
-      x.save();x.translate(W/2,H/2-5);x.scale(Math.cos(t)*0.15+1,1);
-      // body
-      x.fillStyle='#5599ee';x.strokeStyle='#224488';x.lineWidth=2;
-      x.beginPath();x.ellipse(0,0,28,14,0,0,Math.PI*2);x.fill();x.stroke();
-      // head
-      x.fillStyle='#4488dd';
-      x.beginPath();x.ellipse(22,0,12,10,0,0,Math.PI*2);x.fill();x.stroke();
-      // beak
-      x.fillStyle='#ffaa00';x.strokeStyle='#cc8800';x.lineWidth=1.5;
-      x.beginPath();x.moveTo(32,0);x.lineTo(40,3);x.lineTo(40,-3);x.closePath();x.fill();x.stroke();
-      // eye
-      x.fillStyle='#fff';x.beginPath();x.arc(26,-3,3,0,Math.PI*2);x.fill();
-      x.fillStyle='#111';x.beginPath();x.arc(27,-3,1.5,0,Math.PI*2);x.fill();
-      // wings
-      x.fillStyle='#3377cc';x.strokeStyle='#224488';x.lineWidth=1.5;
-      const wFlap=Math.sin(t*4)*12;
-      x.beginPath();x.moveTo(-5,-2);x.quadraticCurveTo(-20,-20+wFlap,-38,-8+wFlap*0.5);x.quadraticCurveTo(-20,-2,-5,8);x.closePath();x.fill();x.stroke();
-      // tail
-      x.fillStyle='#4488cc';
-      x.beginPath();x.moveTo(-22,0);x.lineTo(-38,-8);x.lineTo(-38,8);x.closePath();x.fill();x.stroke();
-      x.restore();
-      // label shadow
-      x.fillStyle='rgba(0,0,0,0.12)';x.beginPath();x.ellipse(W/2,H-12,30,6,0,0,Math.PI*2);x.fill();
-      requestAnimationFrame(draw);
-    }
-    draw();
-  })();
+// ── CHAR SELECT BACKGROUND — same park comic style ───────
+function drawCharSelectBg() {
+  const cv = document.getElementById('cs-bg');
+  if (!cv) return;
+  const dpr = Math.min(window.devicePixelRatio||1,2);
+  const W = window.innerWidth, H = window.innerHeight;
+  cv.width = W*dpr; cv.height = H*dpr;
+  const x = cv.getContext('2d');
+  x.scale(dpr,dpr);
 
-  // Crab preview
-  (function() {
-    const cv = document.getElementById('preview-crab');
-    if (!cv) return;
-    const W=160,H=130,x=cv.getContext('2d');
-    const t0=performance.now();
-    function draw() {
-      if (document.getElementById('char-select')?.style.display==='none') return;
-      x.clearRect(0,0,W,H);
-      const bg=x.createLinearGradient(0,0,0,H);
-      bg.addColorStop(0,'#7ec8f0');bg.addColorStop(1,'#c8efc8');
-      x.fillStyle=bg;x.fillRect(0,0,W,H);
-      const t=(performance.now()-t0)*0.001;
-      x.save();x.translate(W/2,H/2+10);
-      // legs animate
-      const leg=Math.sin(t*3)*8;
-      x.strokeStyle='#cc3300';x.lineWidth=3;x.lineCap='round';
-      [[-22,0,-36,10+leg],[-22,0,-38,2],[-22,0,-34,-8-leg],[22,0,36,10-leg],[22,0,38,2],[22,0,34,-8+leg]].forEach(([x1,y1,x2,y2])=>{
-        x.beginPath();x.moveTo(x1,y1);x.lineTo(x2,y2);x.stroke();
-      });
-      // body
-      x.fillStyle='#ff4400';x.strokeStyle='#cc2200';x.lineWidth=2;
-      x.beginPath();x.ellipse(0,0,30,18,0,0,Math.PI*2);x.fill();x.stroke();
-      // shell texture
-      x.strokeStyle='rgba(0,0,0,0.15)';x.lineWidth=1;
-      x.beginPath();x.arc(0,0,20,0.3,Math.PI-0.3);x.stroke();
-      x.beginPath();x.arc(0,-3,13,0.4,Math.PI-0.4);x.stroke();
-      // eyes
-      [[-10,-12],[10,-12]].forEach(([ex,ey])=>{
-        x.fillStyle='#fff';x.beginPath();x.arc(ex,ey,5,0,Math.PI*2);x.fill();
-        x.strokeStyle='#cc2200';x.lineWidth=1.5;x.stroke();
-        x.fillStyle='#111';x.beginPath();x.arc(ex,ey,2.5,0,Math.PI*2);x.fill();
-      });
-      // claws
-      x.fillStyle='#ff5500';x.strokeStyle='#cc2200';x.lineWidth=2;
-      [[-1,-1],[1,-1]].forEach(([sx])=>{
-        x.save();x.translate(sx*38,-8);x.scale(sx,1);
-        x.beginPath();x.arc(0,0,9,0,Math.PI*2);x.fill();x.stroke();
-        // pinch gap
-        x.strokeStyle='rgba(0,0,0,0.3)';x.lineWidth=2;
-        x.beginPath();x.moveTo(0,-9);x.lineTo(6,-4);x.stroke();
-        x.restore();
-      });
-      x.restore();
-      x.fillStyle='rgba(0,0,0,0.12)';x.beginPath();x.ellipse(W/2,H-8,28,5,0,0,Math.PI*2);x.fill();
-      requestAnimationFrame(draw);
+  const GH = Math.min(H*0.11,80);
+  const groundY = H - GH;
+  const cx = W/2;
+
+  // Sky + ground
+  const bg = x.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,'#4a90d9'); bg.addColorStop(0.5,'#7ec8f0');
+  bg.addColorStop(0.74,'#b8e4b8'); bg.addColorStop(1,'#3d8a30');
+  x.fillStyle=bg; x.fillRect(0,0,W,H);
+
+  // Clouds
+  function cloud(fcx,fcy,s){
+    const ccx=W*fcx,ccy=groundY*fcy;
+    x.fillStyle='rgba(255,255,255,0.88)';
+    [[0,0,s],[s*.7,-s*.3,s*.7],[s*1.3,0,s*.75],[-s*.6,-s*.2,s*.6],[s*.35,-s*.55,s*.55]].forEach(([dx,dy,r])=>{x.beginPath();x.arc(ccx+dx,ccy+dy,r,0,Math.PI*2);x.fill();});
+  }
+  const cs2 = W*0.032;
+  cloud(.07,.12,cs2); cloud(.82,.1,cs2*.85); cloud(.55,.06,cs2*.75); cloud(.22,.08,cs2*.65);
+
+  // Ground strip
+  x.fillStyle='#3d8a30'; x.fillRect(0,groundY,W,GH);
+  x.fillStyle='#2d7020'; x.fillRect(0,groundY+GH*.28,W,GH*.72);
+  const step=Math.max(12,W/55);
+  for(let gx=0;gx<W;gx+=step){x.fillStyle='#55bb40';x.beginPath();x.moveTo(gx,groundY+GH*.28);x.lineTo(gx+step*.3,groundY-6);x.lineTo(gx+step*.6,groundY+GH*.28);x.fill();}
+
+  // Halftone
+  x.save(); x.globalAlpha=0.09;
+  for(let dy=0;dy<H;dy+=13){for(let dx=0;dx<W;dx+=13){x.fillStyle='#003366';x.beginPath();x.arc(dx+6,dy+6,2,0,Math.PI*2);x.fill();}}
+  x.restore();
+
+  // Burst — top 35% of sky, not competing with UI
+  const cy = groundY * 0.22;
+  const sr = Math.min(W*.32, groundY*.28, 160);
+
+  function burst(r1,r2,pts,fill,outline){
+    x.save();
+    x.fillStyle=outline; x.beginPath();
+    for(let i=0;i<pts*2;i++){const r=i%2===0?r2+8:r1+6,a=(i/(pts*2))*Math.PI*2-Math.PI/2;i===0?x.moveTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r):x.lineTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r);}
+    x.closePath(); x.fill();
+    x.fillStyle=fill; x.beginPath();
+    for(let i=0;i<pts*2;i++){const r=i%2===0?r2:r1,a=(i/(pts*2))*Math.PI*2-Math.PI/2;i===0?x.moveTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r):x.lineTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r);}
+    x.closePath(); x.fill(); x.restore();
+  }
+  burst(sr*.38,sr,18,'#FFE600','#1a1000');
+  burst(sr*.34,sr*.84,12,'#FFF176','#FFD600');
+
+  // Speed lines
+  x.save(); x.translate(cx,cy);
+  for(let i=0;i<28;i++){const a=(i/28)*Math.PI*2,len=12+((i*7)%18);x.strokeStyle='rgba(0,0,0,0.07)';x.lineWidth=1.5;x.beginPath();x.moveTo(Math.cos(a)*sr*1.02,Math.sin(a)*sr*1.02);x.lineTo(Math.cos(a)*(sr*1.02+len),Math.sin(a)*(sr*1.02+len));x.stroke();}
+  x.restore();
+
+  // SIGN BOMB text in the burst
+  function ctext(text,tcx,tcy,sz,col,ow,rot){
+    x.save(); x.translate(tcx,tcy); x.rotate(rot||0);
+    x.font='900 italic '+sz+'px Impact,"Arial Black",sans-serif';
+    x.textAlign='center'; x.textBaseline='middle';
+    x.strokeStyle='#0a0a0a'; x.lineWidth=ow; x.lineJoin='round'; x.strokeText(text,0,0);
+    x.fillStyle=col; x.fillText(text,0,0);
+    const sh=x.createLinearGradient(0,-sz*.46,0,sz*.08);
+    sh.addColorStop(0,'rgba(255,255,255,0.82)'); sh.addColorStop(1,'rgba(255,255,255,0)');
+    x.fillStyle=sh; x.fillText(text,0,0);
+    x.restore();
+  }
+  const fs = Math.min(sr*.7, W*.16, H*.09);
+  ctext('SIGN', cx, cy-fs*.58, fs*.75, '#1565C0', fs*.14, -0.07);
+  ctext('BOMB', cx, cy+fs*.58, fs,     '#E53000', fs*.16, -0.07);
+  ctext('!', cx-sr*.5, cy, fs*.55, '#FFE600', fs*.11, -0.15);
+  ctext('!', cx+sr*.5, cy, fs*.55, '#FFE600', fs*.11,  0.15);
+
+  // 4-pt stars
+  function star4(sx,sy,r,col){x.save();x.translate(sx,sy);x.fillStyle=col;x.strokeStyle='#111';x.lineWidth=1.5;x.beginPath();for(let i=0;i<8;i++){const a=(i/8)*Math.PI*2,rad=i%2===0?r:r*.38;x.lineTo(Math.cos(a)*rad,Math.sin(a)*rad);}x.closePath();x.fill();x.stroke();x.restore();}
+  const sr2=Math.max(7,W*.01);
+  [[.1,.09],[.88,.08],[.05,.25],[.94,.24],[.32,.05],[.67,.05]].forEach(([fx,fy],i)=>star4(W*fx,groundY*fy,sr2,i<2?'#FFE600':i<4?'#fff':'#FF6B00'));
+
+  // Birds
+  function bird(bx,by,s){x.strokeStyle='#1a1a1a';x.lineWidth=s;x.lineCap='round';x.beginPath();x.moveTo(bx,by);x.quadraticCurveTo(bx+s*3,by-s*4,bx+s*6,by);x.moveTo(bx+s*6,by);x.quadraticCurveTo(bx+s*9,by-s*4,bx+s*12,by);x.stroke();}
+  bird(W*.06,groundY*.2,2.2); bird(W*.09,groundY*.17,1.8); bird(W*.88,groundY*.18,2); bird(W*.85,groundY*.22,1.6);
+
+  // Bomb emojis low in sky
+  [[.08,.72,22,.6,-.2],[.9,.7,20,.55,.3],[.05,.85,16,.4,-.1],[.93,.83,17,.45,.2]].forEach(([fx,fy,bs,ba,br])=>{
+    x.save();x.globalAlpha=ba;x.translate(W*fx,H*fy);x.rotate(br);x.font=bs+'px serif';x.textAlign='center';x.textBaseline='middle';x.fillText('💣',0,0);x.restore();
+  });
+}
+
+// ── CHAR SELECT PREVIEWS — offscreen WebGL → copy to 2D canvas ─
+function startCharPreviews() {
+  const defs = [
+    { id:'preview-bird', fn:createBirdMesh, color:0x5599ee, camPos:[1.5,1.0,4.5], lookAt:[0,0.1,0] },
+    { id:'preview-crab', fn:createCrabMesh, color:0xff4400, camPos:[-1.5,1.2,5.2], lookAt:[0,0,0] },
+  ];
+  defs.forEach(({ id, fn, color, camPos, lookAt }) => {
+    const dst = document.getElementById(id);
+    if (!dst) return;
+    const W=160, H=130;
+    // offscreen WebGL renderer — never in the DOM
+    const offscreen = document.createElement('canvas');
+    offscreen.width = W; offscreen.height = H;
+    const rend = new THREE.WebGLRenderer({ canvas: offscreen, antialias: true, alpha: true });
+    rend.setPixelRatio(1);
+    rend.setSize(W, H, false);
+    rend.setClearColor(0x000000, 0);
+    const ms = new THREE.Scene();
+    ms.add(new THREE.AmbientLight(0xffffff, 1.1));
+    const dl = new THREE.DirectionalLight(0xffffff, 1.6); dl.position.set(3,5,4); ms.add(dl);
+    const fl = new THREE.DirectionalLight(0x88aaff, 0.4); fl.position.set(-3,-1,-3); ms.add(fl);
+    const mc = new THREE.PerspectiveCamera(42, W/H, 0.1, 50);
+    mc.position.set(...camPos); mc.lookAt(...lookAt);
+    const mesh = fn(color); ms.add(mesh);
+    // 2D context on the card canvas
+    dst.width = W; dst.height = H;
+    const ctx2 = dst.getContext('2d');
+    const t0 = performance.now();
+    function tick() {
+      if (document.getElementById('char-select')?.style.display === 'none') { rend.dispose(); return; }
+      mesh.rotation.y = (performance.now() - t0) * 0.001;
+      rend.render(ms, mc);
+      ctx2.clearRect(0,0,W,H);
+      ctx2.drawImage(offscreen, 0,0,W,H);
+      requestAnimationFrame(tick);
     }
-    draw();
-  })();
+    tick();
+  });
 }
 
 // ── TITLE SCREEN ─────────────────────────────────────────
@@ -1030,12 +1069,13 @@ function startCharPreviews() {
     x.save();x.globalAlpha=ba;x.translate(bx,by);x.rotate(br);x.font=bsz+'px serif';x.textAlign='center';x.textBaseline='middle';x.fillText('💣',0,0);x.restore();
   });
 
-  // Tap to dismiss → show char-select + start previews
+  // Tap to dismiss → show char-select with same bg + start previews
   ts.addEventListener('click', () => {
     ts.style.opacity = '0';
     setTimeout(() => {
       ts.style.display='none';
       document.getElementById('char-select').style.display='flex';
+      drawCharSelectBg();
       startCharPreviews();
     }, 500);
   });
