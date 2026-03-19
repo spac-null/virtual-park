@@ -2,21 +2,23 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=overlays-content, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Virtual Park — Fly</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#4488dd;font-family:'Courier New',monospace;color:#1a1a2e}
 body{position:fixed;top:0;left:0}
-canvas{display:block;cursor:none;position:fixed;top:0;left:0}
+canvas{display:block;cursor:none;position:fixed;top:0;left:0;touch-action:none}
 
 .panel{position:absolute;background:rgba(255,255,255,0.9);border:1px solid rgba(0,100,200,0.22);border-radius:8px;box-shadow:0 2px 14px rgba(0,0,0,0.13);padding:9px 14px;font-size:13px;pointer-events:none;z-index:10;color:#1a1a2e}
 
-#hud-score{top:14px;left:14px;display:flex;align-items:center;gap:12px;padding:7px 14px;font-family:'Courier New',monospace}
-#hud-score .hud-lives{font-size:16px;letter-spacing:3px;color:#ff4444;text-shadow:0 0 4px rgba(255,0,0,0.3)}
-#hud-score .hud-pts{font-size:16px;font-weight:bold;color:#0055cc;letter-spacing:0.5px}
-#hud-score .hud-gems{font-size:14px;color:#666}
-#hud-score .hud-rank{font-size:12px;color:#999;border-left:1px solid rgba(0,0,0,0.12);padding-left:10px}
+#hud-score{position:absolute;top:14px;left:14px;display:flex;align-items:center;gap:10px;padding:0;font-family:'Courier New',monospace;background:none;border:none;box-shadow:none;z-index:10;pointer-events:none}
+#hud-score .hud-lives{font-size:15px;letter-spacing:3px;color:#ff6666;text-shadow:1px 1px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000}
+#hud-score .hud-pts{font-size:15px;font-weight:bold;color:#fff;letter-spacing:0.5px;text-shadow:1px 1px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000}
+#hud-score .hud-gems{font-size:13px;color:#88ddff;text-shadow:1px 1px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000}
+#hud-score .hud-rank{font-size:12px;color:#ffee44;text-shadow:1px 1px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000}
 
 #hud-online{position:absolute;top:14px;right:14px;background:none;border:none;box-shadow:none;padding:0;display:flex;flex-direction:column;gap:0;align-items:flex-end;font-family:'Courier New',monospace;font-size:11px;pointer-events:none;z-index:10;text-align:right}
 #hud-online .online-header{color:#fff;font-size:11px;letter-spacing:2px;text-transform:uppercase;text-shadow:1px 1px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000;margin-bottom:4px;opacity:0.8}
@@ -113,7 +115,7 @@ canvas{display:block;cursor:none;position:fixed;top:0;left:0}
 </head>
 <body>
 
-<div id="hud-score" class="panel">
+<div id="hud-score">
   <span class="hud-lives">♥♥♥</span>
   <span class="hud-pts">◈ 0</span>
   <span class="hud-gems">💎 0</span>
@@ -202,7 +204,7 @@ canvas{display:block;cursor:none;position:fixed;top:0;left:0}
   </div>
   <div id="msg-log-list" style="overflow-y:auto;max-height:280px;padding:6px 0;"></div>
 </div>
-<div id="msg-log-btn" style="position:absolute;bottom:14px;right:14px;z-index:10;pointer-events:auto;font-family:'Courier New',monospace;font-size:11px;color:#1a1a2e;background:rgba(255,255,255,0.88);border:1px solid rgba(0,100,200,0.2);border-radius:4px;padding:4px 10px;cursor:pointer;display:none;">◈ MSG</div>
+<div id="msg-log-btn" style="position:absolute;bottom:14px;right:14px;z-index:10;pointer-events:auto;font-family:'Courier New',monospace;font-size:11px;color:#1a1a2e;background:rgba(255,255,255,0.88);border:1px solid rgba(0,100,200,0.2);border-radius:4px;padding:14px 16px;cursor:pointer;display:none;box-sizing:border-box;min-height:44px;">◈ MSG</div>
 <div id="chat-toast" style="position:absolute;bottom:170px;left:50%;transform:translateX(-50%);z-index:12;pointer-events:none;display:none;flex-direction:column;gap:5px;align-items:center;width:340px;max-width:90vw;"></div>
 
 <div id="esc-menu" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;z-index:40;background:rgba(0,0,20,0.72);backdrop-filter:blur(3px);font-family:'Courier New',monospace;align-items:center;justify-content:center;flex-direction:column;">
@@ -2476,7 +2478,7 @@ function startGame(role) {
     show('mobile-chat');
     // reposition radar to top-right on mobile (small, out of joystick area)
     const _radar = document.getElementById('gem-radar');
-    if (_radar) { _radar.style.bottom=''; _radar.style.top='48px'; _radar.style.left=''; _radar.style.right='14px'; _radar.style.width='60px'; _radar.style.height='60px'; }
+    if (_radar) { _radar.style.bottom=''; _radar.style.top='48px'; _radar.style.left='auto'; _radar.style.right='14px'; _radar.style.width='60px'; _radar.style.height='60px'; }
     const _radarC = document.getElementById('radar-canvas');
     if (_radarC) { _radarC.width=60; _radarC.height=60; }
     hide('speed-dots');
@@ -2484,7 +2486,7 @@ function startGame(role) {
     hide('hint');
     hide('crosshair');
     // move nestHud to top so it doesn't overlap joystick
-    if (nestHudEl) { nestHudEl.style.bottom = ''; nestHudEl.style.top = '48px'; nestHudEl.style.left = '14px'; }
+    if (nestHudEl) { nestHudEl.style.bottom = ''; nestHudEl.style.top = '58px'; nestHudEl.style.left = '14px'; }
     // move chat-toast to top-center on mobile
     const toastEl2 = document.getElementById('chat-toast');
     if (toastEl2) { toastEl2.style.bottom = ''; toastEl2.style.top = '80px'; }
@@ -2681,7 +2683,7 @@ for (let oi = 0; oi < 8; oi++) {
 }
 
 const nestHudEl = document.createElement('div');
-nestHudEl.style.cssText = 'position:absolute;bottom:110px;left:14px;z-index:10;pointer-events:none;font-family:"Courier New",monospace;font-size:13px;color:#1a1a2e;background:rgba(255,255,255,0.88);border:1px solid rgba(0,100,200,0.2);border-radius:6px;padding:8px 12px;';
+nestHudEl.style.cssText = 'position:absolute;bottom:110px;left:14px;z-index:10;pointer-events:none;font-family:"Courier New",monospace;font-size:12px;color:#fff;text-shadow:1px 1px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000;line-height:1.6;';
 nestHudEl.innerHTML = 'nest: <b>0</b> / ' + NEST_WIN + '<br>carrying: <b>0</b>';
 document.body.appendChild(nestHudEl);
 
@@ -3836,10 +3838,15 @@ window.addEventListener('resize', () => {
   }
   applyViewportLock(w, getH());
 });
+// suppress all page scroll/pull-to-refresh on mobile
+document.addEventListener('touchmove', e => { if (e.cancelable) e.preventDefault(); }, { passive: false });
 // also suppress visualViewport changes (iOS Safari inner scroll)
 if (window.visualViewport) {
   window.visualViewport.addEventListener('resize', e => { e.stopPropagation(); });
 }
+// force scroll back to top if browser glitch pushes it
+window.scrollTo(0, 0);
+document.documentElement.scrollTop = 0;
 const _lockedW = _initW;
 </script>
 </body>
