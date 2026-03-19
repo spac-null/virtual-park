@@ -10,23 +10,23 @@ html,body{width:100%;height:100%;overflow:hidden;background:#4488dd;font-family:
 body{position:fixed;top:0;left:0}
 canvas{display:block;cursor:none;position:fixed;top:0;left:0}
 
-.panel{position:absolute;background:rgba(255,255,255,0.88);border:1px solid rgba(0,100,200,0.2);border-radius:6px;box-shadow:0 2px 12px rgba(0,0,0,0.12);padding:8px 12px;font-size:12px;pointer-events:none;z-index:10;color:#1a1a2e}
+.panel{position:absolute;background:rgba(255,255,255,0.9);border:1px solid rgba(0,100,200,0.22);border-radius:8px;box-shadow:0 2px 14px rgba(0,0,0,0.13);padding:9px 14px;font-size:13px;pointer-events:none;z-index:10;color:#1a1a2e}
 
-#hud-score{top:14px;left:14px;display:flex;align-items:center;gap:10px;padding:6px 12px;font-family:'Courier New',monospace}
-#hud-score .hud-lives{font-size:15px;letter-spacing:3px;color:#ff4444;text-shadow:0 0 4px rgba(255,0,0,0.3)}
-#hud-score .hud-pts{font-size:15px;font-weight:bold;color:#0055cc;letter-spacing:0.5px}
-#hud-score .hud-gems{font-size:13px;color:#888}
-#hud-score .hud-rank{font-size:11px;color:#aaa;border-left:1px solid rgba(0,0,0,0.1);padding-left:8px}
+#hud-score{top:14px;left:14px;display:flex;align-items:center;gap:12px;padding:7px 14px;font-family:'Courier New',monospace}
+#hud-score .hud-lives{font-size:16px;letter-spacing:3px;color:#ff4444;text-shadow:0 0 4px rgba(255,0,0,0.3)}
+#hud-score .hud-pts{font-size:16px;font-weight:bold;color:#0055cc;letter-spacing:0.5px}
+#hud-score .hud-gems{font-size:14px;color:#666}
+#hud-score .hud-rank{font-size:12px;color:#999;border-left:1px solid rgba(0,0,0,0.12);padding-left:10px}
 
 #hud-online{position:absolute;top:14px;right:14px;background:none;border:none;box-shadow:none;padding:0;display:flex;flex-direction:column;gap:0;align-items:flex-end;font-family:'Courier New',monospace;font-size:11px;pointer-events:none;z-index:10;text-align:right}
-#hud-online .online-header{color:#fff;font-size:10px;letter-spacing:2px;text-transform:uppercase;text-shadow:1px 1px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000;margin-bottom:3px;opacity:0.7}
+#hud-online .online-header{color:#fff;font-size:11px;letter-spacing:2px;text-transform:uppercase;text-shadow:1px 1px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000;margin-bottom:4px;opacity:0.8}
 #hud-online .dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:4px;vertical-align:middle}
 #hud-online .dot.on{background:#44ff88;box-shadow:0 0 4px #44ff88;animation:pulse 2s infinite}
 #hud-online .dot.off{background:#888}
 #hud-online .player-list{display:flex;flex-direction:column;gap:1px;align-items:flex-end}
 #hud-online .pl-row{display:flex;align-items:center;gap:5px;white-space:nowrap}
 #hud-online .pl-color{width:8px;height:8px;border-radius:1px;flex-shrink:0}
-#hud-online .pl-name{color:#fff;font-size:10px;letter-spacing:0.5px;text-shadow:1px 1px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000;text-transform:uppercase}
+#hud-online .pl-name{color:#fff;font-size:11px;letter-spacing:0.5px;text-shadow:1px 1px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000;text-transform:uppercase}
 #hud-online .pl-name.pl-me{color:#ffee44}
 #hud-online .status{display:none}
 #hud-online .name{display:none}
@@ -64,15 +64,15 @@ canvas{display:block;cursor:none;position:fixed;top:0;left:0}
 #combo-strip .cs-bar{height:2px;background:rgba(255,200,0,0.3);border-radius:2px;margin-top:2px;overflow:hidden}
 #combo-strip .cs-fill{height:100%;background:#ffcc00;transition:width 0.08s linear}
 #scoreboard table{width:100%;border-collapse:collapse}
-#scoreboard th{text-align:left;padding:5px 10px;border-bottom:1px solid rgba(0,100,200,0.25);color:#0055cc;font-weight:400;font-size:11px;text-transform:uppercase;letter-spacing:1px}
-#scoreboard td{padding:3px 10px;border-bottom:1px solid rgba(0,0,0,0.06);font-size:12px}
+#scoreboard th{text-align:left;padding:6px 12px;border-bottom:1px solid rgba(0,100,200,0.25);color:#0055cc;font-weight:400;font-size:12px;text-transform:uppercase;letter-spacing:1px}
+#scoreboard td{padding:5px 12px;border-bottom:1px solid rgba(0,0,0,0.07);font-size:13px}
 #scoreboard .you{color:#0055cc;font-weight:bold}
 
 #controls-overlay{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:20;opacity:0;pointer-events:none;transition:opacity 0.2s;min-width:260px}
 #controls-overlay.visible{opacity:1}
 #controls-overlay table{width:100%;border-collapse:collapse}
-#controls-overlay td{padding:3px 10px;font-size:12px;border-bottom:1px solid rgba(0,0,0,0.06)}
-#controls-overlay td:first-child{color:#0055cc;text-align:right;white-space:nowrap;width:80px}
+#controls-overlay td{padding:5px 12px;font-size:13px;border-bottom:1px solid rgba(0,0,0,0.07)}
+#controls-overlay td:first-child{color:#0055cc;text-align:right;white-space:nowrap;width:88px;font-weight:bold}
 
 #hint{position:absolute;bottom:14px;right:14px;font-size:10px;color:#888;z-index:10;pointer-events:none}
 
@@ -175,6 +175,7 @@ canvas{display:block;cursor:none;position:fixed;top:0;left:0}
     <tr><td>C</td><td>jump (crab)</td></tr>
     <tr><td>F</td><td>burrow — 1.8s invincible (crab, 8s cd)</td></tr>
     <tr><td>G</td><td>shield wall — 3s block + invincible (crab, 10s cd)</td></tr>
+    <tr><td>Z</td><td>egg trap — 8s fuse, triggers on bird landing (crab, 12s cd)</td></tr>
     <tr><td>N</td><td>night vision — green light 10s (crab, 20s cd)</td></tr>
     <tr><td>X</td><td>grappling hook — pull toward point (crab, 7s cd)</td></tr>
     <tr><td>W+W</td><td>dash forward (crab)</td></tr>
@@ -853,7 +854,17 @@ window.addEventListener('keydown', e => {
   keys[e.key] = true;
   if (e.code === 'Tab') {
     e.preventDefault();
-    document.getElementById('scoreboard').classList.add('visible');
+    if (spectatorMode) {
+      const _ids = Object.keys(remotePlayers);
+      if (_ids.length > 0) {
+        const _ci = _specFollowId ? _ids.indexOf(_specFollowId) : -1;
+        _specFollowId = _ids[(_ci + 1) % _ids.length];
+        const _rn = remotePlayers[_specFollowId]?.name || '?';
+        specBannerEl.textContent = '👁 FOLLOWING ' + _rn.toUpperCase() + '  —  TAB: next  |  WASD: free fly';
+      }
+    } else {
+      document.getElementById('scoreboard').classList.add('visible');
+    }
   }
   if (e.key === '?' || e.key === '/') {
     document.getElementById('controls-overlay').classList.toggle('visible');
@@ -1130,6 +1141,10 @@ function updateRocketArc() {
 const _boomFlash = document.createElement('div');
 _boomFlash.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:30;opacity:0;background:rgba(255,185,0,0.72);transition:opacity 0.18s';
 document.body.appendChild(_boomFlash);
+const _lightningEl = document.createElement('div');
+_lightningEl.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:29;opacity:0;background:rgba(210,225,255,0.88);transition:opacity 0.06s';
+document.body.appendChild(_lightningEl);
+let _lightningClock = rand(9, 18);
 let _boomFlashTimer = 0;
 
 function explode(pos, power) {
@@ -2040,6 +2055,21 @@ window.addEventListener('keydown', e => {
   }
   if (e.key === 'Escape' && playerRole) { escMenuOpen ? closeEscMenu() : openEscMenu(); }
   if (e.code === 'KeyC' && playerRole === 'duck' && crabJumpVel === 0) { initAudio(); crabJumpVel = 9; player.mesh.position.y += 0.3; playFlap(); }
+  if (e.code === 'KeyZ' && playerRole === 'duck' && _trapCooldown <= 0 && _traps.filter(t => t.active).length < 2) {
+    initAudio();
+    const _tp = player.mesh.position.clone();
+    _tp.y = terrainY(_tp.x, _tp.z) + 0.38;
+    const _tm = new THREE.Mesh(
+      new THREE.SphereGeometry(0.42, 8, 8),
+      new THREE.MeshStandardMaterial({ color: 0xff2200, emissive: 0xff1100, emissiveIntensity: 1.6, transparent: true, opacity: 0.92 })
+    );
+    _tm.position.copy(_tp); scene.add(_tm);
+    const _tl = new THREE.PointLight(0xff2200, 4, 9);
+    _tl.position.copy(_tp); scene.add(_tl);
+    _traps.push({ mesh: _tm, light: _tl, fuse: 8.0, active: true, pos: _tp.clone() });
+    _trapCooldown = 12;
+    showZoneFlash('💣 TRAP SET', '#ff4400');
+  }
   if (e.code === 'KeyN' && playerRole === 'duck') {
     if (_nvgTimer > 0) { _nvgTimer = 0.01; }
     else if (_nvgCooldown <= 0) { initAudio(); _nvgTimer = 10.0; showZoneFlash('🟩 NVG ON', '#00ff55'); }
@@ -2464,9 +2494,10 @@ document.getElementById('go-restart')?.addEventListener('click', () => location.
 let spectatorMode = false;
 const specPos = new THREE.Vector3(0, 20, 0);
 let specYaw = 0, specPitch = -0.3;
+let _specFollowId = null;
 const specBannerEl = document.createElement('div');
 specBannerEl.style.cssText = 'position:absolute;top:0;left:0;width:100%;text-align:center;z-index:20;pointer-events:none;font-family:"Courier New",monospace;font-size:11px;letter-spacing:3px;color:#aac4ff;background:rgba(20,20,50,0.72);padding:4px 0;display:none;';
-specBannerEl.textContent = '👁  SPECTATING  —  WASD FLY  |  MOUSE LOOK  |  PLAY AGAIN to rejoin';
+specBannerEl.textContent = '👁  SPECTATING  —  WASD FLY  |  TAB: follow player  |  PLAY AGAIN to rejoin';
 document.body.appendChild(specBannerEl);
 
 document.getElementById('go-spectate')?.addEventListener('click', () => {
@@ -2484,6 +2515,22 @@ document.getElementById('go-spectate')?.addEventListener('click', () => {
 
 function updateSpectatorCamera(dt) {
   if (!spectatorMode) return;
+  // follow-cam
+  const _fRp = _specFollowId ? remotePlayers[_specFollowId] : null;
+  if (_fRp && _fRp.mesh) {
+    const _fy = _fRp.targetRotY || 0;
+    const _fOff = new THREE.Vector3(-Math.sin(_fy) * 10, 3.5, -Math.cos(_fy) * 10);
+    specPos.lerp(_fRp.mesh.position.clone().add(_fOff), dt * 6);
+    camera.position.copy(specPos);
+    camera.lookAt(_fRp.mesh.position);
+    // WASD breaks follow
+    if (keys['KeyW'] || keys['KeyS'] || keys['KeyA'] || keys['KeyD'] || keys['ArrowUp'] || keys['ArrowDown']) {
+      _specFollowId = null;
+      specBannerEl.textContent = '👁  SPECTATING  —  WASD FLY  |  TAB: follow player  |  PLAY AGAIN to rejoin';
+      specYaw = camera.rotation.y; specPitch = camera.rotation.x;
+    }
+    return;
+  }
   const spd = keys['ShiftLeft'] || keys['ShiftRight'] ? 28 : 12;
   const _sf = new THREE.Vector3(-Math.sin(specYaw) * Math.cos(specPitch), Math.sin(specPitch), -Math.cos(specYaw) * Math.cos(specPitch));
   const _sr = new THREE.Vector3(Math.cos(specYaw), 0, -Math.sin(specYaw));
@@ -2797,6 +2844,13 @@ const _hookPos = new THREE.Vector3();
 const _hookProjPos = new THREE.Vector3();
 const _hookDir = new THREE.Vector3();
 let _hookPullTimer = 0, _hookCooldown = 0;
+
+// ── EGG TRAPS ───────────────────────────────────────────
+const _traps = [];
+let _trapCooldown = 0;
+
+// ── ALTITUDE BONUS ──────────────────────────────────────
+let _altTimer = 0, _altCooldown = 0;
 
 // ── GEM COMBO ───────────────────────────────────────────
 let _comboTimer = 0, _comboCount = 0;
@@ -3626,6 +3680,76 @@ function animate() {
   // wind noise boost during rain
   if (windGain && _rainIntensity > 0.1) {
     windGain.gain.value = Math.max(windGain.gain.value, _rainIntensity * 0.05);
+  }
+
+  // ── LIGHTNING (during heavy rain) ───────────────────
+  if (_rainIntensity > 0.52) {
+    _lightningClock -= dt;
+    if (_lightningClock <= 0) {
+      _lightningClock = rand(7, 17);
+      _lightningEl.style.transition = 'none'; _lightningEl.style.opacity = '1';
+      setTimeout(() => { _lightningEl.style.transition = 'opacity 0.12s'; _lightningEl.style.opacity = '0'; }, 55);
+      const _tDelay = rand(300, 1600);
+      setTimeout(() => {
+        if (!audioCtx) return;
+        const _t = audioCtx.currentTime;
+        const _buf = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * 1.1), audioCtx.sampleRate);
+        const _d = _buf.getChannelData(0);
+        for (let _i = 0; _i < _d.length; _i++) _d[_i] = (Math.random() * 2 - 1) * Math.max(0, 1 - _i / _d.length * 2.8);
+        const _bn = audioCtx.createBufferSource(); _bn.buffer = _buf;
+        const _bg = audioCtx.createGain(); _bg.gain.value = 0.2;
+        const _bf = audioCtx.createBiquadFilter(); _bf.type = 'lowpass'; _bf.frequency.value = 130;
+        _bn.connect(_bf); _bf.connect(_bg); _bg.connect(masterGain);
+        _bn.start(_t); _bn.stop(_t + 1.1);
+      }, _tDelay);
+    }
+  }
+
+  // ── EGG TRAP UPDATE ──────────────────────────────────
+  if (_trapCooldown > 0) _trapCooldown -= dt;
+  for (let _tri = _traps.length - 1; _tri >= 0; _tri--) {
+    const _tr = _traps[_tri]; if (!_tr.active) continue;
+    _tr.fuse -= dt;
+    _tr.light.intensity = 3 + Math.sin(Date.now() * (0.005 + (8 - Math.max(_tr.fuse, 0)) * 0.004)) * 1.5;
+    let _triggered = _tr.fuse <= 0;
+    if (!_triggered && playerRole === 'bird' && player.mesh) {
+      if (player.mesh.position.distanceTo(_tr.pos) < 5.5 && player.mesh.position.y < _tr.pos.y + 5) _triggered = true;
+    }
+    if (!_triggered) {
+      for (const _rid in remotePlayers) {
+        const _rp2 = remotePlayers[_rid];
+        if (_rp2.role === 'bird' && _rp2.mesh && _rp2.mesh.position.distanceTo(_tr.pos) < 5.5) { _triggered = true; break; }
+      }
+    }
+    if (_triggered) {
+      explode(_tr.pos.clone(), 2.3); playExplosion(_tr.pos.x, _tr.pos.y, _tr.pos.z);
+      if (playerRole === 'duck') {
+        for (const _rid in remotePlayers) {
+          const _rp2 = remotePlayers[_rid];
+          if (_rp2.role === 'bird' && _rp2.mesh && _rp2.mesh.position.distanceTo(_tr.pos) < 7) {
+            nestState.banked += 3; player.score = nestState.banked + nestState.carried;
+            showScorePop('+3 TRAP!', window.innerWidth / 2, window.innerHeight * 0.5, '#ff5500');
+            showZoneFlash('💥 TRAP HIT!', '#ff4400'); break;
+          }
+        }
+      }
+      scene.remove(_tr.mesh); _tr.mesh.geometry.dispose(); _tr.mesh.material.dispose();
+      scene.remove(_tr.light); _tr.active = false; _traps.splice(_tri, 1);
+    }
+  }
+
+  // ── ALTITUDE BONUS (bird) ────────────────────────────
+  if (playerRole === 'bird' && !spectatorMode && player.mesh && !player.landed) {
+    if (_altCooldown > 0) _altCooldown -= dt;
+    if (player.mesh.position.y > 55) {
+      _altTimer += dt;
+      if (_altTimer >= 3 && _altCooldown <= 0) {
+        nestState.carried += 1; player.score = nestState.banked + nestState.carried;
+        showScorePop('+1', window.innerWidth / 2, window.innerHeight * 0.28, '#66ddff');
+        showZoneFlash('✈ ALTITUDE BONUS', '#66ddff');
+        _altTimer = 0; _altCooldown = 10;
+      }
+    } else { _altTimer = 0; }
   }
 
   // ── COMBO TIMER (role-independent) ──────────────────
