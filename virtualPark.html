@@ -288,7 +288,8 @@ camera.position.set(0, CFG.spawnY + 3, 12);
 
 
 // ── LIGHTING ────────────────────────────────────────────
-scene.add(new THREE.AmbientLight(0xd4eeff, 1.2));
+const ambLight = new THREE.AmbientLight(0xd4eeff, 1.2);
+scene.add(ambLight);
 
 const dirLight = new THREE.DirectionalLight(0xfff5cc, 2.2);
 dirLight.position.set(40, 60, 30);
@@ -316,6 +317,38 @@ const haloMesh = new THREE.Mesh(
 );
 haloMesh.position.copy(sunMesh.position);
 scene.add(haloMesh);
+
+// ── DAY/NIGHT CYCLE ─────────────────────────────────────
+let dayTime = 0.25; // start at midday
+const DAY_CYCLE = 120; // seconds per full cycle
+// keyframes: [t, skyHex, fogHex, dirColorHex, ambColorHex, dirIntensity, ambIntensity]
+const _dayKeys = [
+  { t: 0,    sky: 0xff9966, fog: 0xdd7744, dc: 0xff9944, ac: 0xffaa88, di: 0.55, ai: 0.45 },
+  { t: 0.25, sky: 0x4488dd, fog: 0x4488dd, dc: 0xfff5cc, ac: 0xd4eeff, di: 2.2,  ai: 1.2  },
+  { t: 0.5,  sky: 0xcc5522, fog: 0xaa4411, dc: 0xff8844, ac: 0xff9966, di: 0.6,  ai: 0.55 },
+  { t: 0.75, sky: 0x080820, fog: 0x0a0a22, dc: 0x8899cc, ac: 0x112244, di: 0.15, ai: 0.15 },
+];
+const _dnC1 = new THREE.Color(), _dnC2 = new THREE.Color();
+function updateDayNight(dt) {
+  dayTime = (dayTime + dt / DAY_CYCLE) % 1;
+  const n = _dayKeys.length;
+  const ft = dayTime * n;
+  const i0 = Math.floor(ft) % n, i1 = (i0 + 1) % n;
+  const f = ft - Math.floor(ft);
+  const k0 = _dayKeys[i0], k1 = _dayKeys[i1];
+  scene.background.copy(_dnC1.setHex(k0.sky)).lerp(_dnC2.setHex(k1.sky), f);
+  scene.fog.color.copy(_dnC1.setHex(k0.fog)).lerp(_dnC2.setHex(k1.fog), f);
+  dirLight.color.copy(_dnC1.setHex(k0.dc)).lerp(_dnC2.setHex(k1.dc), f);
+  ambLight.color.copy(_dnC1.setHex(k0.ac)).lerp(_dnC2.setHex(k1.ac), f);
+  dirLight.intensity = k0.di + (k1.di - k0.di) * f;
+  ambLight.intensity = k0.ai + (k1.ai - k0.ai) * f;
+  const sunAngle = dayTime * Math.PI * 2 - Math.PI * 0.5;
+  sunMesh.position.set(Math.cos(sunAngle) * 110, Math.sin(sunAngle) * 95, -60);
+  haloMesh.position.copy(sunMesh.position);
+  dirLight.position.copy(sunMesh.position);
+  sunMesh.visible = sunMesh.position.y > -5;
+  haloMesh.visible = sunMesh.visible;
+}
 
 // ── MATERIALS ───────────────────────────────────────────
 const rockMat = new THREE.MeshLambertMaterial({ color: 0xddaa44, flatShading: true });
@@ -533,6 +566,28 @@ scene.add(terrainMesh);
   canopyInst.instanceColor.needsUpdate = true;
   scene.add(trunkInst);
   scene.add(canopyInst);
+}
+
+// ── BIOME PATCHES ───────────────────────────────────────
+{
+  const _snowMat = new THREE.MeshLambertMaterial({ color: 0xeef6ff });
+  const _sandMat = new THREE.MeshLambertMaterial({ color: 0xe8c87a });
+  const _biomes = [
+    { x:  32, z: -22, r: 15, mat: _snowMat },
+    { x: -38, z:  28, r: 13, mat: _snowMat },
+    { x:  14, z:  44, r: 12, mat: _snowMat },
+    { x: -24, z: -36, r: 16, mat: _sandMat },
+    { x:  46, z:  12, r: 18, mat: _sandMat },
+    { x:  -8, z: -52, r: 11, mat: _sandMat },
+  ];
+  for (const _bp of _biomes) {
+    const _pg = new THREE.CircleGeometry(_bp.r, 26);
+    _pg.rotateX(-Math.PI / 2);
+    const _pm = new THREE.Mesh(_pg, _bp.mat);
+    _pm.position.set(_bp.x, Math.sin(_bp.x*0.06)*2.5+Math.cos(_bp.z*0.05)*2.0+Math.sin(_bp.x*0.12+_bp.z*0.09)*1.2 + 0.08, _bp.z);
+    _pm.receiveShadow = true;
+    scene.add(_pm);
+  }
 }
 
 // ── BIRD MESH (N64 chunky style) ─────────────────────────
@@ -1019,6 +1074,34 @@ const projectiles = [];
 const eggs = [];
 const explosionFX = [];
 
+// Rocket trajectory arc preview
+const _arcPts = new Float32Array(22 * 3);
+const _arcGeo = new THREE.BufferGeometry();
+_arcGeo.setAttribute('position', new THREE.BufferAttribute(_arcPts, 3));
+const _arcLine = new THREE.Line(_arcGeo,
+  new THREE.LineBasicMaterial({ color: 0xff6600, opacity: 0.55, transparent: true }));
+_arcLine.visible = false;
+scene.add(_arcLine);
+function updateRocketArc() {
+  if (spectatorMode || playerRole !== 'duck' || dashCooldown > 0 || !player.mesh) {
+    _arcLine.visible = false; return;
+  }
+  const _ad = new THREE.Vector3(-Math.sin(duckYaw), 0.55, -Math.cos(duckYaw)).normalize();
+  let cx = player.mesh.position.x + _ad.x * 1.8;
+  let cy = player.mesh.position.y + _ad.y * 1.8 + 0.6;
+  let cz = player.mesh.position.z + _ad.z * 1.8;
+  let vx = _ad.x * 38, vy = _ad.y * 38, vz = _ad.z * 38;
+  const step = 0.09; let n = 0;
+  for (; n < 22; n++) {
+    _arcPts[n*3] = cx; _arcPts[n*3+1] = cy; _arcPts[n*3+2] = cz;
+    cx += vx*step; vy -= 5*step; cy += vy*step; cz += vz*step;
+    if (cy < terrainY(cx, cz) + 0.5) { n++; break; }
+  }
+  _arcGeo.setDrawRange(0, n);
+  _arcGeo.attributes.position.needsUpdate = true;
+  _arcLine.visible = true;
+}
+
 const _boomFlash = document.createElement('div');
 _boomFlash.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:30;opacity:0;background:rgba(255,185,0,0.72);transition:opacity 0.18s';
 document.body.appendChild(_boomFlash);
@@ -1053,6 +1136,21 @@ function explode(pos, power) {
   camShake = Math.min(camShake + 0.7 * power, 2.5);
   showZoneFlash('BOOM!', '#ff4400');
   if (audioCtx) playExplosion(pos.x, pos.y, pos.z);
+  // scatter nearby NPC birds
+  if (typeof npcBirds !== 'undefined') {
+    const _blastR = power * 11 + 7;
+    for (let _ni = 0; _ni < npcBirds.length; _ni++) {
+      const _nb = npcBirds[_ni];
+      const _nd = _nb.pos.distanceTo(pos);
+      if (_nd < _blastR) {
+        const _sf = (1 - _nd / _blastR) * power;
+        _nb.vel.x += (_nb.pos.x - pos.x) / Math.max(_nd, 1) * _sf * 22;
+        _nb.vel.z += (_nb.pos.z - pos.z) / Math.max(_nd, 1) * _sf * 22;
+        _nb.vel.y += _sf * 14;
+        _nb.scattered = Math.max(_nb.scattered || 0, 2.2);
+      }
+    }
+  }
 }
 
 function updateExplosionFX(dt) {
@@ -1430,6 +1528,7 @@ for (let i = 0; i < CFG.npcCount; i++) {
     pos,
     vel: new THREE.Vector3(rand(-0.5, 0.5), 0, rand(-0.5, 0.5)),
     wingPhase: rand(0, 6),
+    scattered: 0,
     group: g, lw, rw
   });
 }
@@ -1454,9 +1553,11 @@ function updateNPCs(dt) {
       aliX /= nc; aliZ /= nc;
     }
 
-    b.vel.x += cohX * 0.003 + sepX * 0.08 + aliX * 0.01;
-    b.vel.y += cohY * 0.003 + sepY * 0.08;
-    b.vel.z += cohZ * 0.003 + sepZ * 0.08 + aliZ * 0.01;
+    if (b.scattered > 0) b.scattered -= dt;
+    const _boidScale = b.scattered > 0 ? Math.max(0, 1 - b.scattered * 0.7) : 1;
+    b.vel.x += (cohX * 0.003 + sepX * 0.08 + aliX * 0.01) * _boidScale;
+    b.vel.y += (cohY * 0.003 + sepY * 0.08) * _boidScale;
+    b.vel.z += (cohZ * 0.003 + sepZ * 0.08 + aliZ * 0.01) * _boidScale;
 
     // scatter from player (stronger)
     _boidVec.copy(b.pos).sub(pp);
@@ -1655,6 +1756,7 @@ let bazookaCooldown = 0;
 let eggCooldown = 0;
 let dashCooldown = 0;
 let crabJumpVel = 0;
+let _lastWTap = 0, _crabDashVx = 0, _crabDashVz = 0;
 let divebombCooldown = 0;
 
 let escMenuOpen = false;
@@ -1876,6 +1978,16 @@ window.addEventListener('keydown', e => {
   }
   if (e.key === 'Escape' && playerRole) { escMenuOpen ? closeEscMenu() : openEscMenu(); }
   if (e.code === 'KeyC' && playerRole === 'duck' && crabJumpVel === 0) { initAudio(); crabJumpVel = 9; player.mesh.position.y += 0.3; playFlap(); }
+  if (e.code === 'KeyW' && playerRole === 'duck') {
+    const _now = performance.now();
+    if (_now - _lastWTap < 280) {
+      _crabDashVx = -Math.sin(duckYaw) * 22;
+      _crabDashVz = -Math.cos(duckYaw) * 22;
+      showZoneFlash('DASH!', '#00ccff');
+      initAudio(); if (audioCtx) playFlap();
+      _lastWTap = 0;
+    } else { _lastWTap = _now; }
+  }
 });
 
 // ── GHOST TRAIL ─────────────────────────────────────────
@@ -2454,6 +2566,14 @@ function animate() {
       player.mesh.position.z += Math.cos(duckYaw) * duckFwdSpd * dt * mag;
       duckMoving = true;
     }
+    if (_crabDashVx !== 0 || _crabDashVz !== 0) {
+      player.mesh.position.x += _crabDashVx * dt;
+      player.mesh.position.z += _crabDashVz * dt;
+      const _dd = 1 - Math.min(dt * 7, 1);
+      _crabDashVx *= _dd; _crabDashVz *= _dd;
+      if (Math.abs(_crabDashVx) < 0.1) _crabDashVx = 0;
+      if (Math.abs(_crabDashVz) < 0.1) _crabDashVz = 0;
+    }
     const dl = player.mesh.position.length();
     if (dl > 82) player.mesh.position.multiplyScalar(82 / dl);
     const gy = terrainY(player.mesh.position.x, player.mesh.position.z);
@@ -2997,6 +3117,10 @@ function animate() {
     const _up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
     if (audioCtx.listener.setOrientation) audioCtx.listener.setOrientation(_fwd.x, _fwd.y, _fwd.z, _up.x, _up.y, _up.z);
   }
+
+  // ── DAY/NIGHT + ROCKET ARC ──────────────────────────
+  updateDayNight(dt);
+  updateRocketArc();
 
   // ── ROUND TIMER ─────────────────────────────────────
   if (roundInProgress && playerRole) {
