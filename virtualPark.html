@@ -957,7 +957,8 @@ function spawnGem(typeIdx) {
   const light = getGemLight(t.color);
   light.position.copy(pos);
 
-  const gem = { mesh, light, type: typeIdx, active: true, phase: rand(0, 6), beam: null };
+  const groundY = terrainY(pos.x, pos.z);
+  const gem = { mesh, light, type: typeIdx, active: true, phase: rand(0, 6), beam: null, groundY };
 
   if (typeIdx === 2) {
     const beam = new THREE.PointLight(0xffd700, 6, 30);
@@ -966,6 +967,13 @@ function spawnGem(typeIdx) {
     scene.add(beam);
     gem.beam = beam;
   }
+
+  // downward light pillar — helps crabs spot gems from ground level
+  const _dbMat = new THREE.MeshBasicMaterial({ color: t.color, transparent: true, opacity: 0.15, depthWrite: false });
+  const _dbMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1, 4), _dbMat);
+  _dbMesh.visible = false;
+  scene.add(_dbMesh);
+  gem.downBeam = _dbMesh;
 
   gems.push(gem);
 }
@@ -984,11 +992,12 @@ const _particleVel = new THREE.Vector3();
 
 // Pre-allocate pool
 const _particlePool = [];
+const _emberColor = new THREE.Color(0xff2200);
 for (let _pi = 0; _pi < MAX_PARTICLES; _pi++) {
   const m = new THREE.Mesh(_particleGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 }));
   m.visible = false;
   scene.add(m);
-  _particlePool.push(m);
+  _particlePool.push({ mesh: m, startColor: new THREE.Color() });
 }
 
 function burstParticles(pos, color) {
@@ -996,19 +1005,24 @@ function burstParticles(pos, color) {
   const avail = MAX_PARTICLES - particles.length;
   const count = Math.min(10, avail);
   for (let i = 0; i < count; i++) {
-    const m = _particlePool[particles.length + i];
+    const entry = _particlePool[particles.length + i];
+    const m = entry.mesh;
+    entry.startColor.set(color);
     m.material.color.set(color);
     m.material.opacity = 1;
     m.visible = true;
     m.position.copy(pos);
-    _particleVel.set(rand(-1,1), rand(-1,1), rand(-1,1)).normalize().multiplyScalar(rand(3,7));
-    particles.push({ mesh: m, vel: _particleVel.clone(), life: 0.5 });
+    const sc = rand(0.55, 1.7);
+    m.scale.setScalar(sc);
+    _particleVel.set(rand(-1,1), rand(0.2,1), rand(-1,1)).normalize().multiplyScalar(rand(3,8));
+    particles.push({ mesh: m, startColor: entry.startColor, vel: _particleVel.clone(), life: 0.7, maxLife: 0.7 });
   }
 }
 
 function updateParticles(dt) {
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
+    p.vel.y -= 6 * dt;
     p.mesh.position.addScaledVector(p.vel, dt);
     p.life -= dt;
     if (p.life <= 0) {
@@ -1016,7 +1030,10 @@ function updateParticles(dt) {
       p.mesh.material.opacity = 0;
       particles.splice(i, 1);
     } else {
-      p.mesh.material.opacity = p.life / 0.5;
+      const t = 1 - p.life / p.maxLife;
+      p.mesh.material.color.lerpColors(p.startColor, _emberColor, Math.min(t * 1.4, 1));
+      p.mesh.material.opacity = p.life / p.maxLife;
+      p.mesh.scale.setScalar(p.mesh.scale.x * (1 - dt * 1.2));
     }
   }
 }
@@ -1498,7 +1515,8 @@ function getRemotePlayer(id, name, color, role) {
   const rp = {
     mesh, name, color, score: 0, role: role || 'bird',
     targetPos: new THREE.Vector3(0, CFG.spawnY, 0),
-    targetRotY: 0, wingPhase: 0
+    targetRotY: 0, wingPhase: 0,
+    vel: new THREE.Vector3(), lastUpdateTime: 0
   };
   remotePlayers[id] = rp;
   remoteLabels[id] = label;
@@ -1573,6 +1591,8 @@ function connectWS() {
       nestRingMat.emissive.set(player.color);
       nestLight.color.set(player.color);
       if (msg.players) {
+        const _incomingIds = new Set(msg.players.map(p => p.id));
+        for (const id in remotePlayers) { if (!_incomingIds.has(id)) removeRemotePlayer(id); }
         for (const p of msg.players) {
           const rp = getRemotePlayer(p.id, p.name, parseColor(p.color), p.role);
           rp.targetPos.set(p.x || 0, p.y || CFG.spawnY, p.z || 0);
@@ -1591,7 +1611,15 @@ function connectWS() {
     } else if (msg.type === 'update') {
       if (msg.id === myId) return;
       const rp = getRemotePlayer(msg.id, msg.name, parseColor(msg.color), msg.role);
-      rp.targetPos.set(msg.x || 0, msg.y || CFG.spawnY, msg.z || 0);
+      const _now = performance.now() * 0.001;
+      const _newPos = new THREE.Vector3(msg.x || 0, msg.y || CFG.spawnY, msg.z || 0);
+      const _dt = _now - rp.lastUpdateTime;
+      if (_dt > 0.01 && _dt < 0.5) {
+        rp.vel.subVectors(_newPos, rp.targetPos).divideScalar(_dt);
+        if (rp.vel.length() > 40) rp.vel.setLength(40);
+      }
+      rp.targetPos.copy(_newPos);
+      rp.lastUpdateTime = _now;
       rp.targetRotY = msg.rotY || 0;
       rp.score = msg.score || 0;
       rp.speed = msg.speed || 0;
@@ -1956,7 +1984,8 @@ function updateHUD(dt) {
     if (zoneFlashTimer <= 0) zoneFlash.classList.remove('show');
   }
 
-  // radar
+  // radar — throttled to 20fps
+  if (_frameCount % 3 !== 0) return;
   radarCtx.clearRect(0, 0, 82, 82);
   radarCtx.fillStyle = 'rgba(200,230,255,0.75)';
   radarCtx.beginPath(); radarCtx.arc(41, 41, 40, 0, Math.PI * 2); radarCtx.fill();
@@ -2031,8 +2060,10 @@ function updateRemotePlayers(dt) {
   const projVec = _projVec;
   for (const id in remotePlayers) {
     const rp = remotePlayers[id];
-    const _rpd = rp.mesh.position.distanceTo(rp.targetPos);
-    rp.mesh.position.lerp(rp.targetPos, Math.min(1, Math.max(6, _rpd * 4) * dt));
+    const _elapsed = Math.min(performance.now() * 0.001 - rp.lastUpdateTime, 0.25);
+    _tv1.copy(rp.targetPos).addScaledVector(rp.vel, _elapsed);
+    const _rpd = rp.mesh.position.distanceTo(_tv1);
+    rp.mesh.position.lerp(_tv1, Math.min(1, Math.max(6, _rpd * 4) * dt));
     rp.mesh.rotation.y = lerp(rp.mesh.rotation.y, rp.targetRotY, 6 * dt);
     rp.wingPhase += dt * 4;
     const wa = Math.sin(rp.wingPhase) * 0.2;
@@ -2690,10 +2721,28 @@ function animate() {
     g.mesh.rotation.y += dt * 1.5;
     g.mesh.rotation.x += dt * 0.7;
     g.mesh.position.y += Math.sin(time * 2 + g.phase) * 0.003;
+    g.mesh.scale.setScalar(1 + Math.sin(time * 3 + g.phase) * (g.type === 2 ? 0.14 : 0.06));
     if (g.beam) g.beam.intensity = 4 + Math.sin(time * 3) * 3;
+    // downbeam — visible when gem is low (aids crabs)
+    if (g.downBeam) {
+      const _gemH = g.mesh.position.y - g.groundY;
+      if (_gemH < 26) {
+        g.downBeam.visible = true;
+        g.downBeam.scale.y = Math.max(_gemH, 0.5);
+        g.downBeam.position.set(g.mesh.position.x, g.groundY + _gemH * 0.5, g.mesh.position.z);
+        g.downBeam.material.opacity = (1 - _gemH / 26) * 0.22 + Math.sin(time * 2 + g.phase) * 0.04;
+      } else {
+        g.downBeam.visible = false;
+      }
+    }
+    // light boost for low gems
+    const _lf = Math.max(0, (20 - g.mesh.position.y) / 20);
+    g.light.intensity = 4 + _lf * 14;
+    g.light.distance = 10 + _lf * 20;
 
     const dist = player.mesh.position.distanceTo(g.mesh.position);
     if (dist < (playerRole === 'duck' ? 5.0 : 3.0)) {
+      if (nestState.carried >= 5) { showZoneFlash('FULL! BANK NOW', '#ff8800'); continue; }
       const gt = CFG.gemTypes[g.type];
       nestState.carried += gt.points;
       player.score = nestState.banked + nestState.carried;
@@ -2727,6 +2776,7 @@ function animate() {
         gemRef.mesh.position.copy(pos);
         gemRef.light.position.copy(pos);
         if (gemRef.beam) { gemRef.beam.position.copy(pos); gemRef.beam.position.y -= 3; gemRef.beam.visible = true; }
+        gemRef.groundY = terrainY(pos.x, pos.z);
         gemRef.active = true;
         gemRef.mesh.visible = true;
         gemRef.light.visible = true;
