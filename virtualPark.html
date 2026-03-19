@@ -167,6 +167,8 @@ canvas{display:block;cursor:none;position:fixed;top:0;left:0}
     <tr><td>R-drag</td><td>free look</td></tr>
     <tr><td>TAB</td><td>scoreboard</td></tr>
     <tr><td>C</td><td>jump (crab)</td></tr>
+    <tr><td>F</td><td>burrow — 1.8s invincible (crab, 8s cd)</td></tr>
+    <tr><td>W+W</td><td>dash forward (crab)</td></tr>
     <tr><td>R</td><td>respawn (if stuck)</td></tr>
     <tr><td>?</td><td>this overlay</td></tr>
   </table>
@@ -1015,6 +1017,20 @@ function initGems() {
   });
 }
 
+function spawnDropGem(pos) {
+  const t = CFG.gemTypes[0];
+  const mesh = new THREE.Mesh(
+    new THREE.OctahedronGeometry(1.4),
+    new THREE.MeshStandardMaterial({ color: t.color, metalness: 1.0, roughness: 0.0, emissive: t.color, emissiveIntensity: 1.4 })
+  );
+  mesh.position.copy(pos).add(new THREE.Vector3(rand(-2,2), rand(1,3), rand(-2,2)));
+  scene.add(mesh);
+  const light = getGemLight(t.color);
+  light.position.copy(mesh.position);
+  const gem = { mesh, light, type: 0, active: true, phase: rand(0,6), beam: null, downBeam: null, groundY: terrainY(pos.x, pos.z), dropLife: 12.0 };
+  gems.push(gem);
+}
+
 // particles — pooled (shared geo, no alloc per burst)
 const particles = [];
 const MAX_PARTICLES = 60;
@@ -1342,7 +1358,7 @@ function updateEggs(dt) {
 }
 
 // ── AUDIO ───────────────────────────────────────────────
-let audioCtx = null, masterGain = null, windGain = null;
+let audioCtx = null, masterGain = null, windGain = null, reverbGain = null;
 
 function initAudio() {
   if (audioCtx) return;
@@ -1379,6 +1395,21 @@ function initAudio() {
   noiseNode.connect(windFilter);
   windFilter.connect(windGain);
   windGain.connect(masterGain);
+
+  // reverb — convolver with synthetic impulse; gain fades in at night
+  const _revLen = Math.floor(audioCtx.sampleRate * 1.8);
+  const _revBuf = audioCtx.createBuffer(2, _revLen, audioCtx.sampleRate);
+  for (let _rc = 0; _rc < 2; _rc++) {
+    const _rd = _revBuf.getChannelData(_rc);
+    for (let _ri = 0; _ri < _revLen; _ri++) _rd[_ri] = (Math.random()*2-1) * Math.pow(1-_ri/_revLen, 2.2);
+  }
+  const _conv = audioCtx.createConvolver();
+  _conv.buffer = _revBuf;
+  reverbGain = audioCtx.createGain();
+  reverbGain.gain.value = 0;
+  masterGain.connect(_conv);
+  _conv.connect(reverbGain);
+  reverbGain.connect(audioCtx.destination);
 }
 
 function playFlap() {
@@ -1978,6 +2009,12 @@ window.addEventListener('keydown', e => {
   }
   if (e.key === 'Escape' && playerRole) { escMenuOpen ? closeEscMenu() : openEscMenu(); }
   if (e.code === 'KeyC' && playerRole === 'duck' && crabJumpVel === 0) { initAudio(); crabJumpVel = 9; player.mesh.position.y += 0.3; playFlap(); }
+  if (e.code === 'KeyF' && playerRole === 'duck' && !crabBurrowing && burrowCooldown <= 0) {
+    crabBurrowing = true; burrowTimer = 1.8; player.invincible = 1.8;
+    player.mesh.visible = false;
+    showZoneFlash('BURROWING...', '#aa8833');
+    initAudio(); if (audioCtx) playFlap();
+  }
   if (e.code === 'KeyW' && playerRole === 'duck') {
     const _now = performance.now();
     if (_now - _lastWTap < 280) {
@@ -2396,7 +2433,11 @@ function onPlayerHit(fromName, hitType) {
   const _hitMsg = hitType === 'divebomb' ? '🦅 DIVE-BOMBED by ' + fromName + '!' : '💥 HIT BY ' + fromName + '!';
   showZoneFlash(_hitMsg, hitType === 'divebomb' ? '#ff8800' : '#ff2200');
   if (player.lives <= 0) { showGameOver(fromName); return; }
-  if (player.gems > 0) { player.gems = 0; nestState.carried = 0; updateNestHUD(); }
+  if (player.gems > 0) {
+    const _dc = Math.min(nestState.carried, 3);
+    for (let _di = 0; _di < _dc; _di++) spawnDropGem(player.mesh.position.clone());
+    player.gems = 0; nestState.carried = 0; updateNestHUD();
+  }
   player.mesh.position.set(rand(-8, 8), CFG.spawnY, rand(-8, 8));
   player.vel.set(0, 0, 0);
   player.bankAngle = 0;
@@ -2521,6 +2562,70 @@ function updateNestHUD() {
   updateNestBankedVisuals();
 }
 
+// ── RAIN SYSTEM ─────────────────────────────────────────
+const RAIN_COUNT = 220;
+const _rainPos = new Float32Array(RAIN_COUNT * 3);
+const _rainGeo = new THREE.BufferGeometry();
+_rainGeo.setAttribute('position', new THREE.BufferAttribute(_rainPos, 3));
+const _rainMat = new THREE.PointsMaterial({ size: 0.14, color: 0xaaddff, transparent: true, opacity: 0, depthWrite: false });
+const _rainSystem = new THREE.Points(_rainGeo, _rainMat);
+scene.add(_rainSystem);
+let _rainWindX = 0, _rainWindZ = 0, _rainWindTarget = 0, _rainIntensity = 0;
+for (let _ri = 0; _ri < RAIN_COUNT; _ri++) {
+  _rainPos[_ri*3] = rand(-80, 80); _rainPos[_ri*3+1] = rand(0, 80); _rainPos[_ri*3+2] = rand(-80, 80);
+}
+function updateRain(dt) {
+  // intensity: peaks during dusk-night (dayTime 0.45-0.95)
+  const _rTarget = clamp(Math.min(
+    (dayTime - 0.42) / 0.08, (0.96 - dayTime) / 0.08, 1
+  ) * (dayTime > 0.42 && dayTime < 0.96 ? 1 : 0), 0, 1);
+  _rainIntensity = lerp(_rainIntensity, _rTarget, dt * 1.2);
+  _rainMat.opacity = _rainIntensity * 0.6;
+  if (_rainIntensity < 0.02) return;
+  _rainWindTarget = Math.sin(Date.now() * 0.00007) * _rainIntensity * 8;
+  _rainWindX = lerp(_rainWindX, _rainWindTarget * 0.7, dt * 0.4);
+  _rainWindZ = lerp(_rainWindZ, _rainWindTarget * 0.3, dt * 0.4);
+  const _cp = (player.mesh && playerRole) ? player.mesh.position : { x: 0, y: 0, z: 0 };
+  for (let _ri = 0; _ri < RAIN_COUNT; _ri++) {
+    _rainPos[_ri*3]   += _rainWindX * dt;
+    _rainPos[_ri*3+1] -= (30 + _rainIntensity * 20) * dt;
+    _rainPos[_ri*3+2] += _rainWindZ * dt;
+    if (_rainPos[_ri*3+1] < -2) {
+      _rainPos[_ri*3]   = _cp.x + rand(-55, 55);
+      _rainPos[_ri*3+1] = _cp.y + rand(28, 65);
+      _rainPos[_ri*3+2] = _cp.z + rand(-55, 55);
+    }
+  }
+  _rainGeo.attributes.position.needsUpdate = true;
+}
+
+// ── MAGNET POWER-UP ─────────────────────────────────────
+const _magGeo = new THREE.TorusGeometry(0.9, 0.28, 8, 20);
+const _magMesh = new THREE.Mesh(_magGeo,
+  new THREE.MeshStandardMaterial({ color: 0xff00cc, emissive: 0xff00cc, emissiveIntensity: 1.8, metalness: 0.8, roughness: 0.1 })
+);
+const _magLight = new THREE.PointLight(0xff00cc, 5, 14);
+scene.add(_magMesh); scene.add(_magLight);
+let _magActive = true, _magRespawn = 0;
+let _magnetTimer = 0;
+function _placeMagnet() {
+  const mx = rand(-55, 55), mz = rand(-55, 55);
+  const my = terrainY(mx, mz) + rand(10, 28);
+  _magMesh.position.set(mx, my, mz);
+  _magLight.position.set(mx, my, mz);
+  _magMesh.visible = true; _magLight.visible = true;
+  _magActive = true;
+}
+_placeMagnet();
+
+// magnet HUD
+const _magHudEl = document.createElement('div');
+_magHudEl.style.cssText = 'position:absolute;top:50px;left:50%;transform:translateX(-50%);z-index:12;pointer-events:none;font-family:"Courier New",monospace;font-size:13px;font-weight:bold;color:#ff00cc;background:rgba(30,10,30,0.82);border:1px solid rgba(255,0,204,0.4);border-radius:6px;padding:3px 14px;display:none;letter-spacing:1px;';
+document.body.appendChild(_magHudEl);
+
+// ── CRAB BURROW ─────────────────────────────────────────
+let crabBurrowing = false, burrowTimer = 0, burrowCooldown = 0;
+
 // ── GAME LOOP ───────────────────────────────────────────
 let _frameCount = 0;
 function animate() {
@@ -2614,6 +2719,17 @@ function animate() {
     bazookaCooldown = Math.max(0, bazookaCooldown - dt);
     eggCooldown = Math.max(0, eggCooldown - dt);
     dashCooldown = Math.max(0, dashCooldown - dt);
+    if (burrowCooldown > 0) burrowCooldown -= dt;
+    if (crabBurrowing) {
+      burrowTimer -= dt;
+      player.mesh.position.y = terrainY(player.mesh.position.x, player.mesh.position.z) - 0.8;
+      if (burrowTimer <= 0) {
+        crabBurrowing = false; burrowCooldown = 8.0;
+        player.mesh.visible = true;
+        player.mesh.position.y += 1.5;
+        showZoneFlash('EMERGED!', '#aacc44');
+      }
+    }
     // crab can collect gems (radius 4.5 for ground reach)
     player.speed = 0; player.pitchAngle = 0; player.bankAngle = 0;
   } else if (!spectatorMode) {
@@ -3031,6 +3147,59 @@ function animate() {
     }
   }
 
+  // ── MAGNET + DROP GEM UPDATE ─────────────────────────
+  if (_magnetTimer > 0) {
+    _magnetTimer -= dt;
+    const _ms = Math.ceil(_magnetTimer);
+    _magHudEl.style.display = 'block';
+    _magHudEl.textContent = '🧲 MAGNET  ' + _ms + 's';
+    if (_magnetTimer <= 0) _magHudEl.style.display = 'none';
+    // pull active gems toward player
+    if (player.mesh) {
+      for (let gi = 0; gi < gems.length; gi++) {
+        const g = gems[gi];
+        if (!g.active) continue;
+        const _md = player.mesh.position.distanceTo(g.mesh.position);
+        if (_md < 18 && _md > 1.5) {
+          const _pull = 8 * (1 - _md / 18) * dt;
+          g.mesh.position.x += (player.mesh.position.x - g.mesh.position.x) / _md * _pull * 12;
+          g.mesh.position.y += (player.mesh.position.y - g.mesh.position.y) / _md * _pull * 12;
+          g.mesh.position.z += (player.mesh.position.z - g.mesh.position.z) / _md * _pull * 12;
+          g.light.position.copy(g.mesh.position);
+        }
+      }
+    }
+  }
+  // magnet power-up collect
+  if (_magActive && player.mesh) {
+    if (player.mesh.position.distanceTo(_magMesh.position) < 3.2) {
+      _magnetTimer = 8.0; _magActive = false;
+      _magMesh.visible = false; _magLight.visible = false;
+      _magRespawn = 20.0;
+      showZoneFlash('🧲 MAGNET ACTIVE!', '#ff00cc');
+      if (audioCtx) playArchBonus();
+    }
+  }
+  if (!_magActive) {
+    _magRespawn -= dt;
+    if (_magRespawn <= 0) _placeMagnet();
+  }
+  if (_magActive && player.mesh) {
+    _magMesh.rotation.y += dt * 2.2;
+    _magMesh.position.y += Math.sin(time * 2.5) * 0.008;
+  }
+  // drop gem despawn (dropLife timer)
+  for (let gi = gems.length - 1; gi >= 0; gi--) {
+    const g = gems[gi];
+    if (g.dropLife === undefined) continue;
+    if (!g.active) { gems.splice(gi, 1); scene.remove(g.mesh); continue; }
+    g.dropLife -= dt;
+    if (g.dropLife <= 0) {
+      g.active = false; g.mesh.visible = false; g.light.visible = false;
+      gems.splice(gi, 1); scene.remove(g.mesh);
+    }
+  }
+
   // ── ARCH BONUS CHECK ────────────────────────────────
   for (let ai = 0; ai < archZones.length; ai++) {
     if (archCooldowns[ai] > 0) { archCooldowns[ai] -= dt; continue; }
@@ -3118,9 +3287,19 @@ function animate() {
     if (audioCtx.listener.setOrientation) audioCtx.listener.setOrientation(_fwd.x, _fwd.y, _fwd.z, _up.x, _up.y, _up.z);
   }
 
-  // ── DAY/NIGHT + ROCKET ARC ──────────────────────────
+  // ── DAY/NIGHT + ROCKET ARC + RAIN ───────────────────
   updateDayNight(dt);
   updateRocketArc();
+  updateRain(dt);
+  // night reverb — fade in convolver during night
+  if (reverbGain) {
+    const _nt = (dayTime > 0.55 && dayTime < 0.92) ? Math.min((dayTime-0.55)/0.1, (0.92-dayTime)/0.1, 1) * 0.35 : 0;
+    reverbGain.gain.value = lerp(reverbGain.gain.value, _nt, dt * 1.5);
+  }
+  // wind noise boost during rain
+  if (windGain && _rainIntensity > 0.1) {
+    windGain.gain.value = Math.max(windGain.gain.value, _rainIntensity * 0.05);
+  }
 
   // ── ROUND TIMER ─────────────────────────────────────
   if (roundInProgress && playerRole) {
