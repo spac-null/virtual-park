@@ -80,13 +80,13 @@ canvas{display:block;cursor:none;position:fixed;top:0;left:0}
 #joy-base{width:120px;height:120px;border-radius:50%;background:rgba(0,100,200,0.15);border:2px solid rgba(0,100,200,0.4)}
 #joy-thumb{position:absolute;top:50%;left:50%;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;background:rgba(0,100,200,0.35);border:2px solid rgba(0,150,255,0.6)}
 .mob-btn{position:absolute;z-index:15;border-radius:50%;display:none;pointer-events:auto;touch-action:none;font-family:'Courier New',monospace;text-transform:uppercase;letter-spacing:1px;text-align:center;color:#fff;font-size:10px}
-/* right side action buttons — stacked bottom to top */
-#mobile-flap{bottom:110px;right:20px;width:76px;height:76px;line-height:76px;background:rgba(0,100,220,0.82);border:2px solid rgba(100,180,255,0.7)}
-#mobile-egg{bottom:202px;right:20px;width:62px;height:62px;line-height:62px;background:rgba(180,140,0,0.85);border:2px solid rgba(255,210,0,0.7)}
-#mobile-hover{bottom:278px;right:20px;width:52px;height:52px;line-height:52px;background:rgba(80,80,200,0.75);border:2px solid rgba(160,160,255,0.6);font-size:16px}
-#mobile-fire{bottom:110px;right:20px;width:76px;height:76px;line-height:76px;background:rgba(255,100,0,0.82);border:2px solid rgba(255,160,0,0.7)}
-#mobile-rocket{bottom:202px;right:20px;width:62px;height:62px;line-height:62px;background:rgba(200,0,0,0.85);border:2px solid rgba(255,80,80,0.7)}
-#mobile-jump{bottom:278px;right:20px;width:52px;height:52px;line-height:52px;background:rgba(0,160,80,0.8);border:2px solid rgba(80,255,140,0.6);font-size:16px}
+/* right side action buttons — arc layout (thumb-natural reach) */
+#mobile-flap{bottom:134px;right:20px;width:82px;height:82px;line-height:82px;background:rgba(0,100,220,0.82);border:2px solid rgba(100,180,255,0.7)}
+#mobile-egg{bottom:90px;right:118px;width:66px;height:66px;line-height:66px;background:rgba(180,140,0,0.85);border:2px solid rgba(255,210,0,0.7)}
+#mobile-hover{bottom:228px;right:20px;width:58px;height:58px;line-height:58px;background:rgba(80,80,200,0.75);border:2px solid rgba(160,160,255,0.6);font-size:16px}
+#mobile-fire{bottom:134px;right:20px;width:82px;height:82px;line-height:82px;background:rgba(255,100,0,0.82);border:2px solid rgba(255,160,0,0.7)}
+#mobile-rocket{bottom:228px;right:20px;width:66px;height:66px;line-height:66px;background:rgba(200,0,0,0.85);border:2px solid rgba(255,80,80,0.7)}
+#mobile-jump{bottom:90px;right:118px;width:58px;height:58px;line-height:58px;background:rgba(0,160,80,0.8);border:2px solid rgba(80,255,140,0.6);font-size:18px}
 /* chat bottom-center, above joystick area */
 #mobile-chat{bottom:160px;left:20px;width:52px;height:52px;line-height:52px;background:rgba(30,30,60,0.78);border:2px solid rgba(150,180,255,0.45);font-size:18px}
 #hint{display:block}
@@ -104,6 +104,7 @@ canvas{display:block;cursor:none;position:fixed;top:0;left:0}
 #cs-name-input{font-family:'Courier New',monospace;font-size:15px;padding:8px 16px;border:2px solid rgba(0,100,200,0.25);border-radius:8px;background:rgba(255,255,255,0.9);color:#1a1a2e;text-align:center;width:200px;margin-bottom:22px;letter-spacing:1px;outline:none}
 #game-over{display:none;position:absolute;top:0;left:0;width:100%;height:100%;z-index:60;background:rgba(0,0,0,0.88);font-family:'Courier New',monospace;align-items:center;justify-content:center;flex-direction:column;}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
 </head>
 <body>
 
@@ -173,7 +174,7 @@ canvas{display:block;cursor:none;position:fixed;top:0;left:0}
 <div id="hint">? controls &middot; TAB scores</div>
 <div id="crosshair"></div>
 
-<div id="mobile-joy"><div id="joy-base"><div id="joy-thumb"></div></div></div>
+<div id="mobile-joy"></div>
 <div id="mobile-flap" class="mob-btn">FLAP</div>
 <div id="mobile-egg" class="mob-btn">EGG</div>
 <div id="mobile-hover" class="mob-btn">HVR</div>
@@ -819,46 +820,19 @@ window.addEventListener('mousemove', e => {
   }
 });
 
-// mobile joystick
+// mobile joystick — nipplejs
 let joyX = 0, joyY = 0, mobileFlap = false;
-const joyBase = document.getElementById('joy-base');
-const joyThumb = document.getElementById('joy-thumb');
-if (joyBase) {
-  let joyActive = false;
-  const maxR = 40;
-  function joyMove(cx, cy) {
-    const rect = joyBase.getBoundingClientRect();
-    const dx = cx - rect.left - 60, dy = cy - rect.top - 60;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    const clamped = Math.min(dist, maxR);
-    const angle = Math.atan2(dy, dx);
-    const fx = Math.cos(angle) * clamped, fy = Math.sin(angle) * clamped;
-    joyThumb.style.marginLeft = (fx - 20) + 'px';
-    joyThumb.style.marginTop = (fy - 20) + 'px';
-    joyX = fx / maxR;
-    joyY = fy / maxR;
+if (navigator.maxTouchPoints > 0 && typeof nipplejs !== 'undefined') {
+  const _joyEl = document.getElementById('mobile-joy');
+  if (_joyEl) {
+    const _njoy = nipplejs.create({
+      zone: _joyEl, mode: 'static',
+      position: { left: '60px', top: '60px' },
+      color: 'rgba(80,160,255,0.85)', size: 108, restOpacity: 0.65,
+    });
+    _njoy.on('move', (_, d) => { if (d.vector) { joyX = d.vector.x; joyY = -d.vector.y; } });
+    _njoy.on('end', () => { joyX = 0; joyY = 0; });
   }
-  let joyTouchId = null;
-  joyBase.addEventListener('touchstart', e => {
-    e.preventDefault();
-    joyTouchId = e.changedTouches[0].identifier;
-    joyActive = true;
-    joyMove(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
-  });
-  window.addEventListener('touchmove', e => {
-    if (!joyActive) return;
-    for (const t of e.changedTouches) {
-      if (t.identifier === joyTouchId) { joyMove(t.clientX, t.clientY); break; }
-    }
-  });
-  window.addEventListener('touchend', e => {
-    for (const t of e.changedTouches) {
-      if (t.identifier !== joyTouchId) continue;
-      joyActive = false; joyTouchId = null; joyX = 0; joyY = 0;
-    }
-    joyThumb.style.marginLeft = '-20px';
-    joyThumb.style.marginTop = '-20px';
-  });
 }
 let mobileFireBaz = false, mobileFireRocket = false;
 function addTouchBtn(id, onDown, onUp) {
@@ -1076,7 +1050,7 @@ function explode(pos, power) {
   _boomFlashTimer = 0.14;
   camShake = Math.min(camShake + 0.7 * power, 2.5);
   showZoneFlash('BOOM!', '#ff4400');
-  if (audioCtx) playExplosion();
+  if (audioCtx) playExplosion(pos.x, pos.y, pos.z);
 }
 
 function updateExplosionFX(dt) {
@@ -1306,14 +1280,24 @@ function playFlap() {
   o.connect(g); g.connect(masterGain); o.start(t); o.stop(t + 0.1);
 }
 
-function playGemCollect(freq) {
+function _makePanner(px, py, pz) {
+  const pan = audioCtx.createPanner();
+  pan.panningModel = 'HRTF'; pan.distanceModel = 'inverse';
+  pan.refDistance = 4; pan.maxDistance = 50; pan.rolloffFactor = 0.85;
+  pan.setPosition(px, py, pz);
+  pan.connect(masterGain);
+  return pan;
+}
+
+function playGemCollect(freq, px, py, pz) {
   if (!audioCtx) return;
   const t = audioCtx.currentTime;
   const o = audioCtx.createOscillator(); o.type = 'sine'; o.frequency.value = freq;
   const g = audioCtx.createGain();
   g.gain.setValueAtTime(0.2, t);
   g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
-  o.connect(g); g.connect(masterGain); o.start(t); o.stop(t + 0.2);
+  const dest = (px !== undefined) ? _makePanner(px, py, pz) : masterGain;
+  o.connect(g); g.connect(dest); o.start(t); o.stop(t + 0.2);
 }
 
 function playArchBonus() {
@@ -1368,16 +1352,31 @@ function playWin() {
   });
 }
 
-function playExplosion() {
+function playTalonHit() {
   if (!audioCtx) return;
   const t = audioCtx.currentTime;
+  const o = audioCtx.createOscillator(); o.type = 'sawtooth';
+  o.frequency.setValueAtTime(520, t);
+  o.frequency.exponentialRampToValueAtTime(75, t + 0.13);
+  const g = audioCtx.createGain();
+  g.gain.setValueAtTime(0.38, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+  o.connect(g); g.connect(masterGain); o.start(t); o.stop(t + 0.18);
+}
+
+function playExplosion(px, py, pz) {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  const hasSpatial = px !== undefined;
+  const dest = hasSpatial ? _makePanner(px, py, pz) : masterGain;
+  const dest2 = hasSpatial ? _makePanner(px, py, pz) : masterGain;
   const o = audioCtx.createOscillator(); o.type = 'sine';
   o.frequency.setValueAtTime(110, t);
   o.frequency.exponentialRampToValueAtTime(22, t + 0.45);
   const g = audioCtx.createGain();
   g.gain.setValueAtTime(0.55, t);
   g.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
-  o.connect(g); g.connect(masterGain); o.start(t); o.stop(t + 0.55);
+  o.connect(g); g.connect(dest); o.start(t); o.stop(t + 0.55);
   // crack
   const bufLen = Math.floor(audioCtx.sampleRate * 0.18);
   const nb = audioCtx.createBuffer(1, bufLen, audioCtx.sampleRate);
@@ -1385,7 +1384,7 @@ function playExplosion() {
   for (let i = 0; i < bufLen; i++) nd[i] = (Math.random()*2-1) * Math.pow(1 - i/bufLen, 1.8);
   const ns = audioCtx.createBufferSource(); ns.buffer = nb;
   const ng = audioCtx.createGain(); ng.gain.value = 0.45;
-  ns.connect(ng); ng.connect(masterGain); ns.start(t);
+  ns.connect(ng); ng.connect(dest2); ns.start(t);
 }
 
 // ── NPC BIRDS (boids) ───────────────────────────────────
@@ -1629,7 +1628,7 @@ function connectWS() {
     } else if (msg.type === 'trace') {
       addTrace(msg.x || 0, msg.z || 0, msg.y || CFG.spawnY, msg.text || '', msg.color || null, msg.name || null);
     } else if (msg.type === 'hit') {
-      onPlayerHit(msg.fromName || '?');
+      onPlayerHit(msg.fromName || '?', msg.hitType);
     }
   };
 }
@@ -2195,11 +2194,12 @@ function updateLivesHUD() {
   el.style.color = player.lives > 1 ? '#ff4444' : (player.lives === 1 ? '#ff6600' : '#555');
 }
 
-function onPlayerHit(fromName) {
+function onPlayerHit(fromName, hitType) {
   if (!playerRole || player.lives <= 0) return;
   player.lives--;
   updateLivesHUD();
-  showZoneFlash('💥 HIT BY ' + fromName + '!', '#ff2200');
+  const _hitMsg = hitType === 'divebomb' ? '🦅 DIVE-BOMBED by ' + fromName + '!' : '💥 HIT BY ' + fromName + '!';
+  showZoneFlash(_hitMsg, hitType === 'divebomb' ? '#ff8800' : '#ff2200');
   if (player.lives <= 0) { showGameOver(fromName); return; }
   if (player.gems > 0) { player.gems = 0; nestState.carried = 0; updateNestHUD(); }
   player.mesh.position.set(rand(-8, 8), CFG.spawnY, rand(-8, 8));
@@ -2247,6 +2247,32 @@ const nestLight = new THREE.PointLight(0xffaa44, 3, 12);
 nestLight.position.copy(playerNestPos);
 nestLight.position.y += 1;
 scene.add(nestLight);
+
+// banked gem slots — 5 small gems in nest floor ring
+const nestBankedSlots = [];
+for (let _bi = 0; _bi < 5; _bi++) {
+  const _ba = (_bi / 5) * Math.PI * 2;
+  const _bg = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.3),
+    new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0xffd700, emissiveIntensity: 2.0, metalness: 1, roughness: 0 })
+  );
+  _bg.position.set(
+    playerNestPos.x + Math.cos(_ba) * 1.3,
+    playerNestPos.y + 0.4,
+    playerNestPos.z + Math.sin(_ba) * 1.3
+  );
+  _bg.visible = false;
+  scene.add(_bg);
+  nestBankedSlots.push(_bg);
+}
+
+function updateNestBankedVisuals() {
+  const prog = nestState.banked / NEST_WIN;
+  const show = Math.min(5, Math.ceil(nestState.banked / 3));
+  for (let _bi = 0; _bi < 5; _bi++) nestBankedSlots[_bi].visible = _bi < show;
+  nestLight.intensity = 3 + prog * 5;
+  nestRingMat.emissiveIntensity = 0.3 + prog * 1.2;
+}
 
 const nestState = { banked: 0, carried: 0 };
 
@@ -2296,6 +2322,7 @@ function updateNestHUD() {
     html += '<br><span style="color:#ff8800;font-size:15px">' + _nestArrows[arrowIdx] + '</span> <span style="color:#cc6600">' + dist + 'm</span>';
   }
   nestHudEl.innerHTML = html;
+  updateNestBankedVisuals();
 }
 
 // ── GAME LOOP ───────────────────────────────────────────
@@ -2577,11 +2604,11 @@ function animate() {
         nestState.banked += 2;
         player.score = nestState.banked + nestState.carried;
         showZoneFlash('🦅 DIVE-BOMB! +2', '#ffaa00');
-        if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'hit', targetId: id, fromName: playerName }));
+        if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'hit', targetId: id, fromName: playerName, hitType: 'divebomb' }));
         divebombCooldown = 3.0;
         player.vel.y = 10; player.speed = Math.max(player.speed, 10);
         explode(player.mesh.position.clone(), 0.8);
-        playBump();
+        playTalonHit();
         break;
       }
     }
@@ -2647,6 +2674,13 @@ function animate() {
         player.mesh.position.z + Math.sin(angle) * r
       );
       orbitGems[oi].rotation.y += dt * 4;
+    }
+  }
+  // spin banked nest gems + bob
+  for (let _bi = 0; _bi < nestBankedSlots.length; _bi++) {
+    if (nestBankedSlots[_bi].visible) {
+      nestBankedSlots[_bi].rotation.y += dt * 1.8;
+      nestBankedSlots[_bi].position.y = playerNestPos.y + 0.4 + Math.sin(time * 2.2 + _bi) * 0.12;
     }
   }
 
@@ -2748,7 +2782,7 @@ function animate() {
       player.score = nestState.banked + nestState.carried;
       player.gems++;
       burstParticles(g.mesh.position.clone(), gt.color);
-      playGemCollect(gt.freq);
+      playGemCollect(gt.freq, g.mesh.position.x, g.mesh.position.y, g.mesh.position.z);
 
       g.active = false;
       g.mesh.visible = false;
@@ -2861,6 +2895,14 @@ function animate() {
   if (windGain) {
     const windVol = clamp(player.speed / 28 * 0.12, 0, 0.12);
     windGain.gain.value = lerp(windGain.gain.value, windVol, 3 * dt);
+  }
+  // ── AUDIO LISTENER ──────────────────────────────────
+  if (audioCtx && player.mesh) {
+    const _lp = player.mesh.position;
+    if (audioCtx.listener.setPosition) audioCtx.listener.setPosition(_lp.x, _lp.y, _lp.z);
+    const _fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    const _up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+    if (audioCtx.listener.setOrientation) audioCtx.listener.setOrientation(_fwd.x, _fwd.y, _fwd.z, _up.x, _up.y, _up.z);
   }
 
   // ── NETWORK + HUD ──────────────────────────────────
