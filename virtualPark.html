@@ -1686,6 +1686,7 @@ function updateNPCs(dt) {
 
 // ── MULTIPLAYER ─────────────────────────────────────────
 const remotePlayers = {};
+const NPC_NAMES = new Set(['oracle-crow','chaos-swift','gravel-crab']);
 const remoteLabels = {};
 const remoteNests = {};
 
@@ -2150,6 +2151,8 @@ const _comboFillEl = document.getElementById('combo-fill');
 const _scoreboardEl = document.getElementById('scoreboard');
 let _prevScoreText = '', _prevGemText = '';
 let _cachedRank = 1, _prevSortScore = -1;
+let _lastActiveDots = -1, _lastAltPct = -1, _lastNeedsWarning = null;
+let _lastPitchArrow = '';
 
 let zoneFlashTimer = 0;
 
@@ -2279,14 +2282,19 @@ function updateHUD(dt) {
 
   // altitude bar
   const altPct = clamp((player.mesh.position.y - CFG.floorY) / (CFG.ceilY - CFG.floorY), 0, 1) * 100;
-  altFill.style.height = altPct + '%';
-  altFill.style.boxShadow = altPct < 15 ? '0 0 6px #ff4444' : 'none';
+  if (Math.abs(altPct - _lastAltPct) > 0.5) { altFill.style.height = altPct + '%'; _lastAltPct = altPct; }
+  const _needsWarn = altPct < 15;
+  if (_needsWarn !== _lastNeedsWarning) { altFill.style.boxShadow = _needsWarn ? '0 0 6px #ff4444' : 'none'; _lastNeedsWarning = _needsWarn; }
 
   // speed dots
   const spdPct = clamp(player.speed / 28, 0, 1);
   const activeDots = Math.round(spdPct * 10);
-  speedDots.forEach((d, i) => d.classList.toggle('active', i < activeDots));
-  pitchArrow.textContent = player.pitchAngle < -0.1 ? '\u2191' : player.pitchAngle > 0.1 ? '\u2193' : '\u2192';
+  if (activeDots !== _lastActiveDots) {
+    for (let _di = 0; _di < speedDots.length; _di++) speedDots[_di].classList.toggle('active', _di < activeDots);
+    _lastActiveDots = activeDots;
+  }
+  const _pa = player.pitchAngle < -0.1 ? '\u2191' : player.pitchAngle > 0.1 ? '\u2193' : '\u2192';
+  if (_pa !== _lastPitchArrow) { pitchArrow.textContent = _pa; _lastPitchArrow = _pa; }
 
   // zone flash timer
   if (zoneFlashTimer > 0) {
@@ -2306,6 +2314,7 @@ function updateHUD(dt) {
 
   const pp = player.mesh.position;
   const ry = -player.mesh.rotation.y;
+  const _cosRy = Math.cos(ry), _sinRy = Math.sin(ry);
 
   // gem dots on radar
   const _magPulse = _magnetTimer > 0 ? (0.5 + Math.abs(Math.sin(_frameTime * 0.007)) * 0.5) : 1;
@@ -2314,8 +2323,8 @@ function updateHUD(dt) {
     if (!g.active) continue;
     const dx = g.mesh.position.x - pp.x, dz = g.mesh.position.z - pp.z;
     if (dx*dx + dz*dz > 900) continue;
-    const rx = dx * Math.cos(ry) - dz * Math.sin(ry);
-    const rz = dx * Math.sin(ry) + dz * Math.cos(ry);
+    const rx = dx * _cosRy - dz * _sinRy;
+    const rz = dx * _sinRy + dz * _cosRy;
     const sx = 41 + rx / 30 * 38, sy = 41 + rz / 30 * 38;
     radarCtx.globalAlpha = _magPulse;
     radarCtx.fillStyle = '#' + CFG.gemTypes[g.type].color.toString(16).padStart(6, '0');
@@ -2325,13 +2334,12 @@ function updateHUD(dt) {
   }
 
   // player dots on radar — real players in their color, NPCs grey
-  const NPC_NAMES = new Set(['oracle-crow','chaos-swift','gravel-crab']);
   for (const id in remotePlayers) {
     const rp = remotePlayers[id];
     const dx = rp.targetPos.x - pp.x, dz = rp.targetPos.z - pp.z;
     if (dx*dx + dz*dz > 900) continue;
-    const rx = dx * Math.cos(ry) - dz * Math.sin(ry);
-    const rz = dx * Math.sin(ry) + dz * Math.cos(ry);
+    const rx = dx * _cosRy - dz * _sinRy;
+    const rz = dx * _sinRy + dz * _cosRy;
     const sx = 41 + rx / 30 * 38, sy = 41 + rz / 30 * 38;
     const isNPC = NPC_NAMES.has(rp.name);
     if (isNPC) {
@@ -2386,10 +2394,11 @@ function updateRemotePlayers(dt) {
     }
     if (rp.mesh.userData.legs) {
       const moving = rp.speed > 0.5;
-      rp.mesh.userData.legs.forEach(l => {
-        const swing = moving ? Math.sin(time * 8 + l.phase) * 0.3 : 0;
-        l.group.rotation.z = swing * l.side;
-      });
+      const _legs = rp.mesh.userData.legs;
+      for (let _li = 0; _li < _legs.length; _li++) {
+        const l = _legs[_li];
+        l.group.rotation.z = moving ? Math.sin(time * 8 + l.phase) * 0.3 * l.side : 0;
+      }
     }
 
     // name labels
@@ -2402,9 +2411,12 @@ function updateRemotePlayers(dt) {
         label.style.display = 'none';
       } else {
         label.style.display = 'block';
-        label.style.left = ((projVec.x + 1) / 2 * window.innerWidth) + 'px';
-        label.style.top = ((-projVec.y + 1) / 2 * window.innerHeight) + 'px';
-        label.textContent = (rp.role === 'duck' ? '🦀 ' : '🦅 ') + (rp.name || 'bird') + '  ' + (rp.score || 0);
+        const _lx = Math.round((projVec.x + 1) / 2 * window.innerWidth);
+        const _ly = Math.round((-projVec.y + 1) / 2 * window.innerHeight);
+        if (_lx !== rp._lx) { label.style.left = _lx + 'px'; rp._lx = _lx; }
+        if (_ly !== rp._ly) { label.style.top  = _ly + 'px'; rp._ly = _ly; }
+        const _lt = (rp.role === 'duck' ? '🦀 ' : '🦅 ') + (rp.name || 'bird') + '  ' + (rp.score || 0);
+        if (_lt !== rp._lt) { label.textContent = _lt; rp._lt = _lt; }
       }
     }
   }
@@ -3670,7 +3682,8 @@ function animate() {
     traces[i].life -= dt;
     if (traces[i].life <= 0) {
       scene.remove(traces[i].group);
-      traces.splice(i, 1);
+      traces[i] = traces[traces.length - 1];
+      traces.pop();
     } else {
       traces[i].group.position.y = traces[i].group.userData.baseY + Math.sin(time * 0.8 + traces[i].group.userData.phase) * 0.06;
     if (traces[i].group.userData.spriteMat && player.mesh) {
