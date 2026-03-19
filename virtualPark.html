@@ -1095,7 +1095,8 @@ function updateParticles(dt) {
     if (p.life <= 0) {
       p.mesh.visible = false;
       p.mesh.material.opacity = 0;
-      particles.splice(i, 1);
+      particles[i] = particles[particles.length - 1];
+      particles.pop();
     } else {
       const t = 1 - p.life / p.maxLife;
       p.mesh.material.color.lerpColors(p.startColor, _emberColor, Math.min(t * 1.4, 1));
@@ -1111,7 +1112,7 @@ const eggs = [];
 const explosionFX = [];
 
 // Rocket trajectory arc preview
-const _arcPts = new Float32Array(22 * 3);
+const _arcPts = new Float32Array(14 * 3);
 const _arcGeo = new THREE.BufferGeometry();
 _arcGeo.setAttribute('position', new THREE.BufferAttribute(_arcPts, 3));
 const _arcLine = new THREE.Line(_arcGeo,
@@ -1128,7 +1129,7 @@ function updateRocketArc() {
   let cz = player.mesh.position.z + _ad.z * 1.8;
   let vx = _ad.x * 38, vy = _ad.y * 38, vz = _ad.z * 38;
   const step = 0.09; let n = 0;
-  for (; n < 22; n++) {
+  for (; n < 14; n++) {
     _arcPts[n*3] = cx; _arcPts[n*3+1] = cy; _arcPts[n*3+2] = cz;
     cx += vx*step; vy -= 5*step; cy += vy*step; cz += vz*step;
     if (cy < terrainY(cx, cz) + 0.5) { n++; break; }
@@ -1203,7 +1204,8 @@ function updateExplosionFX(dt) {
     fx.life -= dt;
     if (fx.life <= 0) {
       scene.remove(fx.ring); fx.ring.geometry.dispose(); fx.ring.material.dispose();
-      explosionFX.splice(i, 1);
+      explosionFX[i] = explosionFX[explosionFX.length - 1];
+      explosionFX.pop();
     } else {
       const t = 1 - fx.life / fx.maxLife;
       fx.ring.scale.setScalar(fx.maxR * t + 0.5);
@@ -2140,6 +2142,12 @@ const onlineStatus = document.querySelector('#hud-online .status');
 const onlineSquares = document.querySelector('#hud-online .player-squares');
 const onlineName = document.querySelector('#hud-online .name');
 const sbBody = document.getElementById('sb-body');
+const _comboStripEl = document.getElementById('combo-strip');
+const _comboNEl = document.getElementById('combo-n');
+const _comboFillEl = document.getElementById('combo-fill');
+const _scoreboardEl = document.getElementById('scoreboard');
+let _prevScoreText = '', _prevGemText = '';
+let _cachedRank = 1, _prevSortScore = -1;
 
 let zoneFlashTimer = 0;
 
@@ -2243,25 +2251,29 @@ function updateHUD(dt) {
     showScorePop('+' + (player.score - _prevScore), _sr.left + _sr.width / 2, _sr.top, '#ffee44');
   }
   _prevScore = player.score;
-  scoreEl.textContent = '\u25C8 ' + player.score;
-  gemCountEl.textContent = '\uD83D\uDC8E ' + player.gems;
+  const _st = '\u25C8 ' + player.score;
+  if (_st !== _prevScoreText) { scoreEl.textContent = _st; _prevScoreText = _st; }
+  const _gt = '\uD83D\uDC8E ' + player.gems;
+  if (_gt !== _prevGemText) { gemCountEl.textContent = _gt; _prevGemText = _gt; }
   // combo strip
-  const _cStrip = document.getElementById('combo-strip');
-  if (_cStrip) {
+  if (_comboStripEl) {
     if (_comboCount >= 2 && _comboTimer > 0) {
-      _cStrip.style.display = 'block';
-      document.getElementById('combo-n').textContent = _comboCount;
-      document.getElementById('combo-fill').style.width = Math.round(_comboTimer / 5 * 100) + '%';
-    } else { _cStrip.style.display = 'none'; }
+      _comboStripEl.style.display = 'block';
+      _comboNEl.textContent = _comboCount;
+      _comboFillEl.style.width = Math.round(_comboTimer / 5 * 100) + '%';
+    } else { _comboStripEl.style.display = 'none'; }
   }
 
   const allPlayers = [{ name: playerName, score: player.score, me: true }];
   for (const id in remotePlayers) {
     allPlayers.push({ name: remotePlayers[id].name || 'bird', score: remotePlayers[id].score || 0, me: false });
   }
-  allPlayers.sort((a, b) => b.score - a.score);
-  const myRank = allPlayers.findIndex(p => p.me) + 1;
-  rankEl.textContent = '#' + myRank;
+  if (player.score !== _prevSortScore || _frameCount % 30 === 0) {
+    allPlayers.sort((a, b) => b.score - a.score);
+    _cachedRank = allPlayers.findIndex(p => p.me) + 1;
+    _prevSortScore = player.score;
+  }
+  rankEl.textContent = '#' + _cachedRank;
 
   // altitude bar
   const altPct = clamp((player.mesh.position.y - CFG.floorY) / (CFG.ceilY - CFG.floorY), 0, 1) * 100;
@@ -2299,8 +2311,7 @@ function updateHUD(dt) {
     const g = gems[gi];
     if (!g.active) continue;
     const dx = g.mesh.position.x - pp.x, dz = g.mesh.position.z - pp.z;
-    const dist = Math.sqrt(dx * dx + dz * dz);
-    if (dist > 30) continue;
+    if (dx*dx + dz*dz > 900) continue;
     const rx = dx * Math.cos(ry) - dz * Math.sin(ry);
     const rz = dx * Math.sin(ry) + dz * Math.cos(ry);
     const sx = 41 + rx / 30 * 38, sy = 41 + rz / 30 * 38;
@@ -2316,8 +2327,7 @@ function updateHUD(dt) {
   for (const id in remotePlayers) {
     const rp = remotePlayers[id];
     const dx = rp.targetPos.x - pp.x, dz = rp.targetPos.z - pp.z;
-    const dist = Math.sqrt(dx * dx + dz * dz);
-    if (dist > 30) continue;
+    if (dx*dx + dz*dz > 900) continue;
     const rx = dx * Math.cos(ry) - dz * Math.sin(ry);
     const rz = dx * Math.sin(ry) + dz * Math.cos(ry);
     const sx = 41 + rx / 30 * 38, sy = 41 + rz / 30 * 38;
@@ -2346,7 +2356,7 @@ function updateHUD(dt) {
   radarCtx.fillRect(39.5, 39.5, 3, 3);
 
   // scoreboard — only rebuild when visible
-  if (document.getElementById('scoreboard').classList.contains('visible')) {
+  if (_scoreboardEl.classList.contains('visible')) {
     allPlayers.sort((a, b) => b.score - a.score);
     let sbHTML = '';
     allPlayers.forEach((p, i) => {
@@ -2732,11 +2742,13 @@ function updateRain(dt) {
   if (_rainIntensity < 0.02) return;
   if (_frameCount % 2 !== 0) return; // position update every other frame (dt doubled below)
   const _rainDt = dt * 2;
+  const _activeRain = Math.round(150 + _rainIntensity * 70) | 0;
+  _rainGeo.setDrawRange(0, _activeRain);
   _rainWindTarget = Math.sin(_frameTime * 0.00007) * _rainIntensity * 8;
   _rainWindX = lerp(_rainWindX, _rainWindTarget * 0.7, dt * 0.4);
   _rainWindZ = lerp(_rainWindZ, _rainWindTarget * 0.3, dt * 0.4);
   const _cp = (player.mesh && playerRole) ? player.mesh.position : { x: 0, y: 0, z: 0 };
-  for (let _ri = 0; _ri < RAIN_COUNT; _ri++) {
+  for (let _ri = 0; _ri < _activeRain; _ri++) {
     _rainPos[_ri*3]   += _rainWindX * _rainDt;
     _rainPos[_ri*3+1] -= (30 + _rainIntensity * 20) * _rainDt;
     _rainPos[_ri*3+2] += _rainWindZ * _rainDt;
@@ -2786,7 +2798,7 @@ scene.add(_shieldMesh);
 let _shieldTimer = 0, _shieldCooldown = 0;
 
 // ── BIRD TRAIL ───────────────────────────────────────────
-const _TRAIL_SEGS = 16;
+const _TRAIL_SEGS = 12;
 const _trailHistPts = [];
 for (let _ti = 0; _ti < _TRAIL_SEGS; _ti++) _trailHistPts.push(new THREE.Vector3());
 const _trailBuf = new Float32Array(_TRAIL_SEGS * 3);
@@ -3355,7 +3367,7 @@ function animate() {
     for (let _gi = 0; _gi < gems.length && _bPairs < _MAG_BEAM_MAX; _gi++) {
       const _g = gems[_gi];
       if (!_g.active) continue;
-      if (player.mesh.position.distanceTo(_g.mesh.position) < 18) {
+      if (player.mesh.position.distanceToSquared(_g.mesh.position) < 324) {
         const _bb = _bPairs * 6;
         _magBeamBuf[_bb]   = _g.mesh.position.x; _magBeamBuf[_bb+1] = _g.mesh.position.y; _magBeamBuf[_bb+2] = _g.mesh.position.z;
         _magBeamBuf[_bb+3] = player.mesh.position.x; _magBeamBuf[_bb+4] = player.mesh.position.y; _magBeamBuf[_bb+5] = player.mesh.position.z;
@@ -3484,8 +3496,8 @@ function animate() {
     g.light.intensity = 4 + _lf * 14;
     g.light.distance = 10 + _lf * 20;
 
-    const dist = player.mesh.position.distanceTo(g.mesh.position);
-    if (dist < (playerRole === 'duck' ? 5.0 : 3.0)) {
+    const _d2 = player.mesh.position.distanceToSquared(g.mesh.position);
+    if (_d2 < (playerRole === 'duck' ? 25.0 : 9.0)) {
       if (nestState.carried >= 5) { showZoneFlash('FULL! BANK NOW', '#ff8800'); continue; }
       const gt = CFG.gemTypes[g.type];
       nestState.carried += gt.points;
@@ -3513,7 +3525,7 @@ function animate() {
       // check cave bonus
       for (let ci = 0; ci < caveZones.length; ci++) {
         const cz = caveZones[ci];
-        if (g.mesh.position.distanceTo(cz.center) < cz.len + 5) {
+        if (g.mesh.position.distanceToSquared(cz.center) < (cz.len + 5) * (cz.len + 5)) {
           nestState.carried += 1;
           player.score = nestState.banked + nestState.carried;
           showZoneFlash('CAVE BONUS!', '#ffd700');
@@ -3551,8 +3563,9 @@ function animate() {
       for (let gi = 0; gi < gems.length; gi++) {
         const g = gems[gi];
         if (!g.active) continue;
-        const _md = player.mesh.position.distanceTo(g.mesh.position);
-        if (_md < 18 && _md > 1.5) {
+        const _md2 = player.mesh.position.distanceToSquared(g.mesh.position);
+        if (_md2 < 324 && _md2 > 2.25) {
+          const _md = Math.sqrt(_md2);
           const _pull = 8 * (1 - _md / 18) * dt;
           g.mesh.position.x += (player.mesh.position.x - g.mesh.position.x) / _md * _pull * 12;
           g.mesh.position.y += (player.mesh.position.y - g.mesh.position.y) / _md * _pull * 12;
@@ -3564,7 +3577,7 @@ function animate() {
   }
   // magnet power-up collect
   if (_magActive && player.mesh) {
-    if (player.mesh.position.distanceTo(_magMesh.position) < 3.2) {
+    if (player.mesh.position.distanceToSquared(_magMesh.position) < 10.24) {
       _magnetTimer = 8.0; _magActive = false;
       _magMesh.visible = false; _magLight.visible = false;
       _magRespawn = 20.0;
@@ -3610,14 +3623,14 @@ function animate() {
   }
 
   // ── NEST LANDING ────────────────────────────────────
-  const nestDist = player.mesh.position.distanceTo(nestGroup.position);
   const nearGround = player.mesh.position.y < playerNestPos.y + 4;
-  if (nestDist < 4.5 && nearGround && nestState.carried > 0) {
+  if (nearGround && nestState.carried > 0 && player.mesh.position.distanceToSquared(nestGroup.position) < 20.25) {
     nestState.banked += nestState.carried;
     player.score = nestState.banked;
     showZoneFlash('+' + nestState.carried + ' banked!', '#22cc44');
     playBankGems(nestState.carried);
-    burstParticles(nestGroup.position.clone().add(new THREE.Vector3(0, 1, 0)), 0xffaa00);
+    _tv2.copy(nestGroup.position); _tv2.y += 1;
+    burstParticles(_tv2, 0xffaa00);
     nestState.carried = 0;
     updateNestHUD();
     if (nestState.banked >= NEST_WIN) triggerWin(playerName);
@@ -3631,7 +3644,7 @@ function animate() {
   updateExplosionFX(dt);
 
   // ── NPC BIRDS (every 2 frames — 8×boids is cheap but no need at 60fps) ──
-  if (_frameCount % 2 === 0) updateNPCs(dt * 2);
+  if (_frameCount % 3 === 0) updateNPCs(dt * 3);
 
   // ── REMOTE PLAYERS ──────────────────────────────────
   updateRemotePlayers(dt);
@@ -3724,12 +3737,12 @@ function animate() {
     _tr.light.intensity = 3 + Math.sin(_frameTime * (0.005 + (8 - Math.max(_tr.fuse, 0)) * 0.004)) * 1.5;
     let _triggered = _tr.fuse <= 0;
     if (!_triggered && playerRole === 'bird' && player.mesh) {
-      if (player.mesh.position.distanceTo(_tr.pos) < 5.5 && player.mesh.position.y < _tr.pos.y + 5) _triggered = true;
+      if (player.mesh.position.y < _tr.pos.y + 5 && player.mesh.position.distanceToSquared(_tr.pos) < 30.25) _triggered = true;
     }
     if (!_triggered) {
       for (const _rid in remotePlayers) {
         const _rp2 = remotePlayers[_rid];
-        if (_rp2.role === 'bird' && _rp2.mesh && _rp2.mesh.position.distanceTo(_tr.pos) < 5.5) { _triggered = true; break; }
+        if (_rp2.role === 'bird' && _rp2.mesh && _rp2.mesh.position.distanceToSquared(_tr.pos) < 30.25) { _triggered = true; break; }
       }
     }
     if (_triggered) {
@@ -3737,7 +3750,7 @@ function animate() {
       if (playerRole === 'duck') {
         for (const _rid in remotePlayers) {
           const _rp2 = remotePlayers[_rid];
-          if (_rp2.role === 'bird' && _rp2.mesh && _rp2.mesh.position.distanceTo(_tr.pos) < 7) {
+          if (_rp2.role === 'bird' && _rp2.mesh && _rp2.mesh.position.distanceToSquared(_tr.pos) < 49) {
             nestState.banked += 3; player.score = nestState.banked + nestState.carried;
             showScorePop('+3 TRAP!', window.innerWidth / 2, window.innerHeight * 0.5, '#ff5500');
             showZoneFlash('💥 TRAP HIT!', '#ff4400'); break;
