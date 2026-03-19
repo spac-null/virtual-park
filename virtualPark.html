@@ -2755,7 +2755,8 @@ const _camEuler = new THREE.Euler();
 // Smooth yaw prevents shake when bird turns sharply
 const camState = {
   yaw: 0,          // lagged behind player.mesh.rotation.y
-  smoothPos: new THREE.Vector3(0, CFG.spawnY, 0)
+  smoothPos: new THREE.Vector3(0, CFG.spawnY, 0),
+  mobileY: CFG.spawnY + 10  // smoothed mobile camera Y — prevents snap on terrain clamp
 };
 
 // ── ARCH COLLISION COOLDOWNS ────────────────────────────
@@ -3405,7 +3406,7 @@ function animate() {
   // pitch — keyboard W=dive/S=climb (flight sim), joystick inverted (up=climb feels natural)
   if (keys['KeyW'] || keys['ArrowUp']) player.pitchAngle -= pitchRate * dt;
   if (keys['KeyS'] || keys['ArrowDown']) player.pitchAngle += pitchRate * dt;
-  if (joyY < -0.2) player.pitchAngle += pitchRate * dt * Math.abs(joyY); // joystick up = climb
+  if (joyY < -0.2) { player.pitchAngle += pitchRate * dt * Math.abs(joyY); player.vel.y += Math.abs(joyY) * 4.0 * dt; } // joystick up = climb + direct lift
   if (joyY > 0.2)  player.pitchAngle -= pitchRate * dt * joyY;            // joystick down = dive
 
   // bank + yaw — desktop: bank drives yaw (flight sim feel); mobile: direct yaw only, bank is cosmetic
@@ -3772,9 +3773,10 @@ function animate() {
     const _mCamUp   = player.landed ? 8 : 3;
     const _mCamX = player.mesh.position.x + Math.sin(yaw) * _mCamBack;
     const _mCamZ = player.mesh.position.z + Math.cos(yaw) * _mCamBack;
-    // clamp camera above terrain+trees at its back position — prevents occlusion by hills & canopy
-    const _mCamY = Math.max(player.mesh.position.y + _mCamUp, terrainY(_mCamX, _mCamZ) + 10);
-    camera.position.set(_mCamX, _mCamY, _mCamZ);
+    // target: above player OR above terrain+trees — smoothed to prevent snap/shake on manoeuvres
+    const _mCamYTarget = Math.max(player.mesh.position.y + _mCamUp, terrainY(_mCamX, _mCamZ) + 10);
+    camState.mobileY = lerp(camState.mobileY, _mCamYTarget, Math.min(5 * dt, 1));
+    camera.position.set(_mCamX, camState.mobileY, _mCamZ);
     _tv1.copy(player.mesh.position);
     _tv1.y += 1.5;
     camera.lookAt(_tv1);
