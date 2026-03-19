@@ -147,6 +147,7 @@ canvas{display:block;cursor:none;position:fixed;top:0;left:0}
   <div style="color:#ff3333;font-size:52px;font-weight:bold;letter-spacing:4px;margin-bottom:10px;">YOU DIED</div>
   <div id="go-msg" style="color:rgba(255,255,255,0.6);font-size:14px;margin-bottom:28px;"></div>
   <button id="go-restart" style="font-family:'Courier New',monospace;font-size:14px;padding:12px 32px;background:rgba(255,255,255,0.9);border:none;border-radius:6px;cursor:pointer;font-weight:bold;letter-spacing:2px;">▶ PLAY AGAIN</button>
+  <button id="go-spectate" style="font-family:'Courier New',monospace;font-size:12px;padding:8px 22px;background:rgba(60,60,100,0.9);color:#aac4ff;border:1px solid rgba(150,180,255,0.4);border-radius:6px;cursor:pointer;letter-spacing:2px;margin-top:10px;">👁 SPECTATE</button>
 </div>
 
 <div id="scoreboard" class="panel">
@@ -771,7 +772,8 @@ const player = {
   landed: false,
   color: 0x00b3ff,
   name: playerName,
-  lives: 3
+  lives: 3,
+  invincible: 0
 };
 
 player.mesh = createBirdMesh(player.color);
@@ -1077,6 +1079,17 @@ function fireBarooka() {
   bazookaCooldown = 0.75;
   initAudio();
   const dir = new THREE.Vector3(-Math.sin(duckYaw), 0.45, -Math.cos(duckYaw)).normalize();
+  // aim assist — blend 28% toward nearest airborne remote player within 32 units + ~60° arc
+  let _aaT = null, _aaDist = 33;
+  for (const id in remotePlayers) {
+    if (remotePlayers[id].role === 'duck') continue;
+    const _d = player.mesh.position.distanceTo(remotePlayers[id].mesh.position);
+    if (_d < _aaDist) { _aaT = remotePlayers[id]; _aaDist = _d; }
+  }
+  if (_aaT) {
+    const _toT = _aaT.mesh.position.clone().sub(player.mesh.position).normalize();
+    if (dir.dot(_toT) > 0.45) { dir.lerp(_toT, 0.28).normalize(); showZoneFlash('◉ LOCK', '#00ccff'); }
+  }
   const sp = player.mesh.position.clone().addScaledVector(dir, 1.6).add(new THREE.Vector3(0, 0.5, 0));
   const pm = new THREE.Mesh(
     new THREE.SphereGeometry(0.28, 6, 5),
@@ -1917,18 +1930,38 @@ function showZoneFlash(text, color) {
 }
 
 let roundInProgress = true;
+const ROUND_TIME = 180;
+let roundTime = ROUND_TIME;
+
+// Timer HUD
+const timerEl = document.createElement('div');
+timerEl.style.cssText = 'position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:12;pointer-events:none;font-family:"Courier New",monospace;font-size:15px;font-weight:bold;color:#1a1a2e;background:rgba(255,255,255,0.88);border:1px solid rgba(0,100,200,0.2);border-radius:6px;padding:3px 14px;letter-spacing:2px;display:none;';
+document.body.appendChild(timerEl);
+let _timerDisplay = -1;
+function updateTimerHUD() {
+  const s = Math.max(0, Math.ceil(roundTime));
+  if (s === _timerDisplay) return;
+  _timerDisplay = s;
+  const m = Math.floor(s / 60), sec = s % 60;
+  timerEl.textContent = m + ':' + String(sec).padStart(2, '0');
+  timerEl.style.color = s <= 30 ? '#cc2200' : '#1a1a2e';
+}
+
 function triggerWin(winnerName) {
   if (!roundInProgress) return;
   roundInProgress = false;
   const isMe = winnerName === playerName;
   showZoneFlash(isMe ? '🏆 YOU WIN!' : winnerName + ' WINS!', isMe ? '#22cc44' : '#ff8800');
   if (isMe) playWin();
+  timerEl.style.display = 'none';
   // Reset after 5s
   setTimeout(() => {
     player.score = 0;
     player.gems = 0;
     nestState.banked = 0;
     nestState.carried = 0;
+    roundTime = ROUND_TIME;
+    _timerDisplay = -1;
     updateNestHUD();
     for (const id in remotePlayers) remotePlayers[id].score = 0;
     roundInProgress = true;
@@ -2136,6 +2169,7 @@ function startGame(role) {
   player.name = playerName;
   playerRole = role;
   document.getElementById('char-select').style.display = 'none';
+  timerEl.style.display = 'block';
   updateLivesHUD();
   if (role === 'duck') {
     // replace player mesh with crab
@@ -2187,6 +2221,55 @@ document.getElementById('btn-bird').addEventListener('click', () => startGame('b
 document.getElementById('btn-duck').addEventListener('click', () => startGame('duck'));
 document.getElementById('go-restart')?.addEventListener('click', () => location.reload());
 
+// ── SPECTATOR MODE ───────────────────────────────────────
+let spectatorMode = false;
+const specPos = new THREE.Vector3(0, 20, 0);
+let specYaw = 0, specPitch = -0.3;
+const specBannerEl = document.createElement('div');
+specBannerEl.style.cssText = 'position:absolute;top:0;left:0;width:100%;text-align:center;z-index:20;pointer-events:none;font-family:"Courier New",monospace;font-size:11px;letter-spacing:3px;color:#aac4ff;background:rgba(20,20,50,0.72);padding:4px 0;display:none;';
+specBannerEl.textContent = '👁  SPECTATING  —  WASD FLY  |  MOUSE LOOK  |  PLAY AGAIN to rejoin';
+document.body.appendChild(specBannerEl);
+
+document.getElementById('go-spectate')?.addEventListener('click', () => {
+  spectatorMode = true;
+  document.getElementById('game-over').style.display = 'none';
+  specBannerEl.style.display = 'block';
+  if (player.mesh) player.mesh.visible = false;
+  specPos.copy(camera.position);
+  specYaw = Math.atan2(
+    camera.position.x - (player.mesh ? player.mesh.position.x : 0),
+    camera.position.z - (player.mesh ? player.mesh.position.z : 0)
+  );
+  specPitch = -0.25;
+});
+
+function updateSpectatorCamera(dt) {
+  if (!spectatorMode) return;
+  const spd = keys['ShiftLeft'] || keys['ShiftRight'] ? 28 : 12;
+  const _sf = new THREE.Vector3(-Math.sin(specYaw) * Math.cos(specPitch), Math.sin(specPitch), -Math.cos(specYaw) * Math.cos(specPitch));
+  const _sr = new THREE.Vector3(Math.cos(specYaw), 0, -Math.sin(specYaw));
+  if (keys['KeyW'] || keys['ArrowUp'])   specPos.addScaledVector(_sf, spd * dt);
+  if (keys['KeyS'] || keys['ArrowDown']) specPos.addScaledVector(_sf, -spd * dt);
+  if (keys['KeyA'] || keys['ArrowLeft']) specPos.addScaledVector(_sr, -spd * dt);
+  if (keys['KeyD'] || keys['ArrowRight'])specPos.addScaledVector(_sr, spd * dt);
+  if (keys['Space'])   specPos.y += spd * dt;
+  if (keys['KeyC'])    specPos.y -= spd * dt;
+  camera.position.copy(specPos);
+  camera.rotation.order = 'YXZ';
+  camera.rotation.y = specYaw;
+  camera.rotation.x = specPitch;
+}
+
+// mouse-drag spec yaw/pitch
+let _specDrag = false;
+window.addEventListener('mousedown', e => { if (spectatorMode && e.button === 0) _specDrag = true; });
+window.addEventListener('mouseup',   () => { _specDrag = false; });
+window.addEventListener('mousemove', e => {
+  if (!_specDrag || !spectatorMode) return;
+  specYaw   -= e.movementX * 0.003;
+  specPitch  = Math.max(-1.3, Math.min(1.3, specPitch - e.movementY * 0.003));
+});
+
 function updateLivesHUD() {
   const el = document.querySelector('#hud-score .hud-lives');
   if (!el) return;
@@ -2195,7 +2278,7 @@ function updateLivesHUD() {
 }
 
 function onPlayerHit(fromName, hitType) {
-  if (!playerRole || player.lives <= 0) return;
+  if (!playerRole || player.lives <= 0 || player.invincible > 0) return;
   player.lives--;
   updateLivesHUD();
   const _hitMsg = hitType === 'divebomb' ? '🦅 DIVE-BOMBED by ' + fromName + '!' : '💥 HIT BY ' + fromName + '!';
@@ -2205,6 +2288,7 @@ function onPlayerHit(fromName, hitType) {
   player.mesh.position.set(rand(-8, 8), CFG.spawnY, rand(-8, 8));
   player.vel.set(0, 0, 0);
   player.bankAngle = 0;
+  player.invincible = 2.0;
   camState.smoothPos.copy(player.mesh.position);
   showZoneFlash('respawn — ' + player.lives + ' ♥ left', '#4ade80');
 }
@@ -2335,7 +2419,7 @@ function animate() {
   const time = clock.elapsedTime;
 
   // ── FLIGHT PHYSICS (bird) / GROUND MOVEMENT (duck) ──
-  if (playerRole === 'duck') {
+  if (!spectatorMode && playerRole === 'duck') {
     // crab ground movement — Q/E or mouse drag to turn, A/D strafe sideways (natural crab direction)
     // joystick X → turn crab (mobile); keyboard Q/E → turn
     if (keys['KeyQ'] || keys['ArrowLeft']) duckYaw += 2.5 * dt;
@@ -2412,7 +2496,7 @@ function animate() {
     dashCooldown = Math.max(0, dashCooldown - dt);
     // crab can collect gems (radius 4.5 for ground reach)
     player.speed = 0; player.pitchAngle = 0; player.bankAngle = 0;
-  } else {
+  } else if (!spectatorMode) {
   // ── BIRD FLIGHT ──────────────────────────────────────
   const pitchRate = 2.6;
   const yawRate   = 2.0;
@@ -2616,6 +2700,12 @@ function animate() {
 
   // Hit flash timer
   if (player.hitFlash > 0) { player.hitFlash -= dt; }
+  if (player.invincible > 0) {
+    player.invincible -= dt;
+    if (player.mesh) player.mesh.visible = Math.floor(player.invincible * 10) % 2 === 0;
+  } else if (player.mesh && !player.mesh.visible) {
+    player.mesh.visible = true;
+  }
 
   eggCooldown = Math.max(0, eggCooldown - dt);
   } // end bird-only block
@@ -2688,10 +2778,13 @@ function animate() {
   // Camera shake decay
   if (camShake > 0) {
     camShake = Math.max(0, camShake - dt * 4);
-    camera.position.x += (Math.random() - 0.5) * camShake * 0.4;
-    camera.position.y += (Math.random() - 0.5) * camShake * 0.2;
+    if (!spectatorMode) {
+      camera.position.x += (Math.random() - 0.5) * camShake * 0.4;
+      camera.position.y += (Math.random() - 0.5) * camShake * 0.2;
+    }
   }
 
+  if (spectatorMode) { updateSpectatorCamera(dt); } else
   if (playerRole === 'duck') {
     // Ground-level camera behind duck
     _tv2.set(Math.sin(duckYaw) * 10, 4.5, Math.cos(duckYaw) * 10);
@@ -2903,6 +2996,23 @@ function animate() {
     const _fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
     const _up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
     if (audioCtx.listener.setOrientation) audioCtx.listener.setOrientation(_fwd.x, _fwd.y, _fwd.z, _up.x, _up.y, _up.z);
+  }
+
+  // ── ROUND TIMER ─────────────────────────────────────
+  if (roundInProgress && playerRole) {
+    roundTime -= dt;
+    updateTimerHUD();
+    if (roundTime <= 0) {
+      // time up — highest score wins
+      let _bestName = playerName, _bestScore = nestState.banked;
+      for (const id in remotePlayers) {
+        if ((remotePlayers[id].score || 0) > _bestScore) {
+          _bestScore = remotePlayers[id].score;
+          _bestName = remotePlayers[id].name || '?';
+        }
+      }
+      triggerWin(_bestName);
+    }
   }
 
   // ── NETWORK + HUD ──────────────────────────────────
