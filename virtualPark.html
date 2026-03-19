@@ -1122,6 +1122,8 @@ const keys = {};
 window.addEventListener('keydown', e => {
   keys[e.code] = true;
   keys[e.key] = true;
+  // prevent browser scroll on game keys
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.key)) e.preventDefault();
   if (e.code === 'Tab') {
     e.preventDefault();
     if (spectatorMode) {
@@ -3515,7 +3517,7 @@ function animate() {
 
   // terrain collision — always clamp, strong damping on contact
   const groundY = terrainY(player.mesh.position.x, player.mesh.position.z);
-  const floorY = groundY + 0.5;  // match crab ground level
+  const floorY = groundY + 0.3;  // match crab visual ground level
   if (player.mesh.position.y <= floorY + 0.05) {
     player.mesh.position.y = floorY;
     player.vel.x = 0; player.vel.z = 0; player.vel.y = 0;
@@ -3769,12 +3771,10 @@ function animate() {
   if (isTouchDevice) {
     // Mobile: rigid camera — always exactly behind bird, no smoothing, no lag
     const yaw = player.mesh.rotation.y;
-    const _mCamBack = player.landed ? 9 : 13;
-    const _mCamUp   = player.landed ? 8 : 3;
-    const _mCamX = player.mesh.position.x + Math.sin(yaw) * _mCamBack;
-    const _mCamZ = player.mesh.position.z + Math.cos(yaw) * _mCamBack;
-    // target: above player OR above terrain+trees — smoothed to prevent snap/shake on manoeuvres
-    const _mCamYTarget = Math.max(player.mesh.position.y + _mCamUp, terrainY(_mCamX, _mCamZ) + 10);
+    const _mCamX = player.mesh.position.x + Math.sin(yaw) * 11;
+    const _mCamZ = player.mesh.position.z + Math.cos(yaw) * 11;
+    // follow bird at +5, clear terrain surface (+1.5) — lerp smooths all transitions
+    const _mCamYTarget = Math.max(player.mesh.position.y + 5, terrainY(_mCamX, _mCamZ) + 1.5);
     camState.mobileY = lerp(camState.mobileY, _mCamYTarget, Math.min(5 * dt, 1));
     camera.position.set(_mCamX, camState.mobileY, _mCamZ);
     _tv1.copy(player.mesh.position);
